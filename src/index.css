@@ -1,0 +1,1614 @@
+@import "tailwindcss";
+
+/* Prevent text selection throughout the game's UI */
+body, html, #root {
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none;    /* Firefox */
+  -ms-user-select: none;     /* IE10+/Edge */
+  user-select: none;         /* Standard */
+  background: linear-gradient(180deg, #1b223c 0%, #12162a 50%, #19162c 100%);
+}
+
+/* Allow text selection specifically for input fields, textareas, or editable controls */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+@layer utilities {
+  /* Dynamic path connection light animation */
+  @keyframes line-glow-dash {
+    to {
+      stroke-dashoffset: -40;
+    }
+  }
+
+  .stroke-dasharray-anim {
+    stroke-dasharray: 8, 4;
+    animation: line-glow-dash 2s linear infinite;
+  }
+
+  /* Subtle card error vibration response */
+  @keyframes card-vibrate-shake {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    20%, 60% {
+      transform: translateX(-4px);
+    }
+    40%, 80% {
+      transform: translateX(4px);
+    }
+  }
+
+  .animate-shake {
+    animation: card-vibrate-shake 0.35s ease-in-out;
+  }
+
+  /* Very subtle card tactile jiggle on tap */
+  @keyframes card-tactile-jiggle {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    20%, 60% {
+      transform: translateX(-1.5px);
+    }
+    40%, 80% {
+      transform: translateX(1.5px);
+    }
+  }
+
+  .animate-card-jiggle {
+    animation: card-tactile-jiggle 65ms ease-in-out;
+  }
+
+  /* Smooth fade/scale animation for casual-game style dialogs */
+  @keyframes scale-up-fade {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .animate-scale-up-fade {
+    animation: scale-up-fade 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes fade-in-backdrop {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in-backdrop {
+    animation: fade-in-backdrop 0.2s ease-out forwards;
+  }
+
+  /* Poki Game Aspect Ratio and Fluid Scaling System */
+  .poki-game-frame {
+    aspect-ratio: 9 / 16;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  @media (min-width: 640px) or (orientation: landscape) {
+    .poki-game-frame {
+      aspect-ratio: 16 / 9;
+    }
+  }
+
+  /* Viewport Height constrained card sizes to prevent any scrolling */
+  .poki-match-card {
+    width: 100%;
+    aspect-ratio: 13 / 15;
+    max-width: clamp(65px, 11.5vh, 120px);
+    margin-left: auto;
+    margin-right: auto;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px -3px rgba(0, 0, 0, 0.18), 0 3px 8px -1px rgba(0, 0, 0, 0.12);
+  }
+
+  .poki-match-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.24), 0 6px 12px -2px rgba(0, 0, 0, 0.14);
+  }
+
+  .poki-memory-card {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    max-width: clamp(45px, 8.5vh, 90px);
+    margin-left: auto;
+    margin-right: auto;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px -3px rgba(0, 0, 0, 0.16), 0 2px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  .poki-memory-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.22), 0 4px 10px -2px rgba(0, 0, 0, 0.14);
+  }
+
+  @media (min-width: 1024px) {
+    .poki-match-card {
+      max-width: clamp(100px, 15.5vh, 160px);
+    }
+    .poki-memory-card {
+      max-width: clamp(75px, 12vh, 130px);
+    }
+  }
+
+  /* Poki Match Columns & Memory Grid */
+  .poki-match-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: center;
+    gap: clamp(4px, 1.2vh, 14px);
+    padding-top: clamp(2px, 0.5vh, 6px);
+    padding-bottom: clamp(2px, 0.5vh, 6px);
+    z-index: 20;
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .poki-memory-grid {
+    display: grid;
+    justify-content: center;
+    align-content: center;
+    margin: auto;
+    max-width: 100% !important;
+    max-height: 100% !important;
+  }
+
+  .poki-memory-grid .poki-memory-card {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    aspect-ratio: 1 / 1 !important;
+  }
+
+  /* Override card sizes to become larger when the sidebar is collapsed */
+  .sidebar-collapsed .poki-match-card {
+    max-width: clamp(85px, 14.5vh, 155px) !important;
+  }
+}
+
+/* Custom gorgeous thin scrollbar to keep layout clean */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* --- PREMIUM VICTORY CELEBRATION STYLES & ANIMATIONS --- */
+
+@keyframes pop-bounce-float {
+  0% {
+    transform: scale(0) translateY(0);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.2) translateY(0);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(0.95) translateY(0);
+  }
+  42% {
+    transform: scale(1) translateY(0);
+  }
+  65% {
+    transform: scale(1.02) translateY(-10px);
+  }
+  85% {
+    transform: scale(0.98) translateY(5px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-pop-bounce-float {
+  animation: pop-bounce-float 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes text-shine {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.text-shine-gradient {
+  background: linear-gradient(
+    120deg,
+    #fbbf24 0%,
+    #fef08a 25%,
+    #f59e0b 50%,
+    #fef08a 75%,
+    #ea580c 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: text-shine 1.5s linear infinite;
+}
+
+@keyframes firework-burst-premium {
+  0% {
+    transform: scale(0.1);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.animate-firework-burst-premium {
+  animation: firework-burst-premium 1.5s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+}
+
+@keyframes firework-particle-premium {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tw-x), var(--tw-y)) scale(0.2);
+    opacity: 0;
+  }
+}
+
+.animate-firework-particle-premium {
+  animation: firework-particle-premium 1.5s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10%) rotate(0deg);
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(110%) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-confetti {
+  animation: confetti-fall 2.2s linear infinite;
+}
+
+.victory-screen-glow {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.22) 0%, rgba(0, 0, 0, 0) 70%);
+  mix-blend-mode: screen;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.animate-fade-out-celebration {
+  animation: fade-out-celebration 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes fade-out-celebration {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+.animate-score-summary-fade-in {
+  animation: score-summary-fade-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes score-summary-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* --- RANK UP ANIMATIONS --- */
+
+@keyframes fade-in-backdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in-backdrop {
+  animation: fade-in-backdrop 0.35s ease-out forwards;
+}
+
+@keyframes scale-up {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-scale-up {
+  animation: scale-up 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes badge-scale-up {
+  0% { transform: scale(0.4); opacity: 0; }
+  70% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-badge-scale-up {
+  animation: badge-scale-up 0.7s cubic-bezier(0.34, 1.7, 0.64, 1) forwards;
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+/* --- VISUAL POLISH EFFECTS (SCREEN SHAKE, SPARKLES, COMBOS) --- */
+
+@keyframes screen-shake-anim {
+  0%, 100% { transform: translate(0, 0); }
+  10%, 90% { transform: translate(-2px, 1px); }
+  20%, 80% { transform: translate(3px, -2px); }
+  30%, 70% { transform: translate(-3px, 2px); }
+  40%, 60% { transform: translate(2px, -1px); }
+  50% { transform: translate(-1px, 1px); }
+}
+
+.animate-screen-shake {
+  animation: screen-shake-anim 0.08s ease-in-out;
+}
+
+@keyframes card-sparkle {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0);
+    opacity: 0;
+  }
+}
+
+.animate-sparkle {
+  animation: card-sparkle 0.45s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes combo-pop-fade {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6) rotate(-5deg);
+    opacity: 0;
+  }
+  15% {
+    transform: translate(-50%, -50%) scale(1.25) rotate(3deg);
+    opacity: 1;
+  }
+  30% {
+    transform: translate(-50%, -50%) scale(0.95) rotate(-2deg);
+    opacity: 1;
+  }
+  45% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.85) translateY(-30px);
+  }
+}
+
+.animate-combo {
+  animation: combo-pop-fade 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Portrait Mobile Layout ONLY: Make gameplay viewport/canvas fill the entire screen and stretch board/cards */
+@media (max-width: 639px) and (orientation: portrait) {
+  /* Prevent any vertical scrolling and force viewport to fill the screen */
+  .game-viewport-container {
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+  }
+
+  /* Make the game frame fill the viewport height completely */
+  #poki-game-frame.poki-game-frame {
+    aspect-ratio: auto !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0px !important;
+    border-width: 0px !important;
+  }
+
+  /* Make the main layout fill the entire screen height without any gaps */
+  #poki-game-frame main {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Make tab containers stretch 100% height */
+  #match-container-wrapper, #memory-container-wrapper {
+    height: 100% !important;
+    min-height: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+  }
+
+  /* Stretches the cards boards to the absolute edges of the mobile screen */
+  #match-board-card, #memory-board-card {
+    height: 100% !important;
+    min-height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0px !important;
+    border-width: 0px !important;
+    margin: 0 !important;
+    padding-top: clamp(6px, 1.5vh, 12px) !important;
+    padding-left: clamp(6px, 1.5vh, 12px) !important;
+    padding-right: clamp(6px, 1.5vh, 12px) !important;
+    /* Bottom padding is configured to leave room for the absolute branding footer */
+    padding-bottom: calc(clamp(36px, 5vh, 48px) + env(safe-area-inset-bottom, 8px)) !important;
+  }
+
+  /* Poki Branding Footer for Portrait Mobile */
+  .poki-branding-footer {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding-left: clamp(12px, 2vh, 18px) !important;
+    padding-right: clamp(12px, 2vh, 18px) !important;
+    padding-top: clamp(8px, 1.5vh, 12px) !important;
+    padding-bottom: calc(clamp(8px, 1.5vh, 12px) + env(safe-area-inset-bottom, 8px)) !important;
+    background: #ffffff !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 10px !important;
+    z-index: 30 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Redistribute vertical space: Allow match cards to scale up bigger on tall viewports */
+  .poki-match-card {
+    max-width: clamp(75px, 15vh, 135px) !important;
+  }
+
+
+
+  /* Tighter Match Mode layout elements to maximize wiring field size */
+  #match-board-card .relative.z-20.flex.justify-between.items-center {
+    margin-bottom: clamp(6px, 1vh, 12px) !important;
+    padding-bottom: clamp(4px, 0.8vh, 8px) !important;
+  }
+}
+
+/* ==========================================================================
+   STRICT MOBILE PORTRAIT (9:16) AND MOBILE LANDSCAPE (16:9) LAYOUT SYSTEM
+   ========================================================================== */
+
+/* --- SHARED MOBILE RESETS --- */
+.is-mobile-portrait,
+.is-mobile-landscape {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0px !important;
+  border-width: 0px !important;
+  box-shadow: none !important;
+}
+
+.is-mobile-portrait main,
+.is-mobile-landscape main {
+  padding: 0px !important;
+  margin: 0px !important;
+  height: 100% !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  flex: 1 !important;
+}
+
+/* --- MOBILE PORTRAIT (9:16) LAYOUT SPECIFICS --- */
+.is-mobile-portrait #match-board-card,
+.is-mobile-portrait #memory-board-card {
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  border-radius: 0px !important;
+  border-width: 0px !important;
+  margin: 0 !important;
+  padding-top: clamp(8px, 2vh, 16px) !important;
+  padding-left: clamp(8px, 2vw, 16px) !important;
+  padding-right: clamp(8px, 2vw, 16px) !important;
+  /* Extra space at bottom to prevent branding footer overlap */
+  padding-bottom: calc(clamp(44px, 7vh, 56px) + env(safe-area-inset-bottom, 8px)) !important;
+}
+
+/* --- MOBILE LANDSCAPE (16:9) LAYOUT SPECIFICS --- */
+.is-mobile-landscape {
+  flex-direction: row !important; /* Force side-by-side sidebar and main area */
+}
+
+/* Force game frame to be 100% fullscreen in Mobile Landscape */
+.is-mobile-landscape #poki-game-frame.poki-game-frame {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+  min-width: 100vw !important;
+  max-width: 100vw !important;
+  margin: 0 !important;
+  border-radius: 0px !important;
+  border-width: 0px !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+/* In Mobile Landscape, the gameplay view (main) must occupy the remaining horizontal space. */
+.is-mobile-landscape main {
+  display: flex !important;
+  flex: 1 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Mobile Config Menu full viewport placement (fully replaces the gameplay view) */
+.is-mobile-landscape #mobile-menu-container {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 9999 !important;
+  padding: 16px !important;
+}
+
+/* Modal backdrops in mobile landscape must render above mobile menu container (z-index 9999) */
+.is-mobile-landscape #settings-modal-backdrop,
+.is-mobile-landscape #shop-modal-backdrop,
+.is-mobile-landscape #memory-confirm-backdrop,
+.is-mobile-landscape #rank-up-backdrop,
+.is-mobile-landscape #highscore-popup-backdrop,
+.is-mobile-landscape #reset-confirm-backdrop,
+.is-mobile-landscape #how-to-play-backdrop {
+  z-index: 10000 !important;
+}
+
+/* Make sure container wrappers stretch to 100% height and width in mobile landscape */
+.is-mobile-landscape #match-container-wrapper,
+.is-mobile-landscape #memory-container-wrapper {
+  height: 100% !important;
+  min-height: 100% !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Make sidebar compact and scrollable to prevent any vertical overflow when not fully expanded */
+.is-mobile-landscape #poki-sidebar {
+  width: 170px !important;
+  min-width: 170px !important;
+  max-width: 170px !important;
+  height: 100% !important;
+  border-right-width: 2px !important;
+  border-bottom-width: 0px !important;
+}
+
+.is-mobile-landscape #poki-sidebar > div {
+  padding: 8px !important;
+  gap: 8px !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  /* Hide scrollbar track but allow scrolling */
+  scrollbar-width: none;
+}
+
+.is-mobile-landscape #poki-sidebar > div::-webkit-scrollbar {
+  display: none;
+}
+
+/* Reduce vertical gaps and sizing in landscape sidebar */
+.is-mobile-landscape .poki-game-frame .flex.landscape:flex-col {
+  gap: 6px !important;
+}
+
+.is-mobile-landscape .poki-game-frame h1 {
+  font-size: 10px !important;
+}
+
+/* Gameplay container and boards in landscape */
+.is-mobile-landscape #match-board-card,
+.is-mobile-landscape #memory-board-card {
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  border-radius: 0px !important;
+  border-width: 0px !important;
+  margin: 0 !important;
+  padding-top: clamp(6px, 1.5vh, 12px) !important;
+  padding-left: clamp(12px, 3vw, 24px) !important;
+  padding-right: clamp(12px, 3vw, 24px) !important;
+  padding-bottom: calc(clamp(6px, 1.5vh, 12px) + env(safe-area-inset-bottom, 8px)) !important;
+}
+
+/* Strict scaling for Match and Memory Cards in landscape so they NEVER overflow the short screen height */
+@media (orientation: landscape) {
+  .poki-memory-grid {
+    justify-content: center !important;
+    align-content: center !important;
+    margin: auto !important;
+  }
+}
+
+.is-mobile-landscape .poki-memory-grid {
+  justify-content: center !important;
+  align-content: center !important;
+  margin: auto !important;
+}
+
+.is-mobile-landscape .poki-match-card {
+  max-width: clamp(55px, 18vh, 110px) !important;
+}
+
+.is-mobile-landscape #match-container {
+  gap-x: clamp(16px, 4vw, 48px) !important;
+  max-width: none !important;
+}
+
+/* Tighter match score header in landscape */
+.is-mobile-landscape #match-board-card .relative.z-20.flex.justify-between.items-center,
+.is-mobile-landscape #memory-board-card .relative.z-20.flex.justify-between.items-center {
+  margin-bottom: clamp(2px, 0.5vh, 6px) !important;
+  padding-bottom: clamp(2px, 0.5vh, 6px) !important;
+}
+
+/* ==========================================================================
+   UNIFIED RESPONSIVE MODAL SYSTEM FOR MOBILE LANDSCAPE (16:9)
+   ========================================================================== */
+
+@media (orientation: landscape) and (max-height: 480px) {
+  /* Backdrops - Safe Poki Margins, Full Containment & Flex Alignment */
+  #settings-modal-backdrop,
+  #shop-modal-backdrop,
+  #memory-confirm-backdrop,
+  #rank-up-backdrop,
+  #highscore-popup-backdrop,
+  #reset-confirm-backdrop,
+  #how-to-play-backdrop {
+    padding: clamp(8px, 2vh, 16px) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    z-index: 10000 !important;
+  }
+
+  /* 1. SETTINGS MODAL REFLOW */
+  #settings-modal-content {
+    max-height: 94dvh !important;
+    max-width: 440px !important;
+    padding: 12px 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+  }
+  #settings-modal-content > div:first-of-type {
+    margin-bottom: 8px !important; /* tight header margin */
+  }
+  #settings-modal-content .space-y-4 {
+    overflow-y: auto !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    padding-right: 4px !important;
+    margin-bottom: 4px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  #settings-modal-content #setting-row-language,
+  #settings-modal-content #setting-row-audio {
+    padding: 8px 12px !important;
+    border-radius: 12px !important;
+    margin-top: 0 !important;
+  }
+  #settings-modal-content .mt-6 {
+    margin-top: 8px !important;
+    padding-top: 8px !important;
+  }
+
+  /* 2. GAME START CONFIRMATION MODAL REFLOW */
+  #memory-confirm-content {
+    max-height: 94dvh !important;
+    max-width: 440px !important;
+    padding: 12px 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+  }
+  #memory-confirm-content .flex-col.items-center.text-center {
+    flex-direction: row !important;
+    text-align: left !important;
+    gap: 12px !important;
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
+  }
+  #memory-confirm-content .flex-col.items-center.text-center .w-12.h-12 {
+    width: 28px !important;
+    height: 28px !important;
+    margin-bottom: 0 !important;
+    border-radius: 8px !important;
+  }
+  #memory-confirm-content .flex-col.items-center.text-center .w-12.h-12 span {
+    font-size: 16px !important;
+  }
+  #memory-confirm-content .flex-col.items-center.text-center h3 {
+    font-size: 14px !important;
+  }
+  #memory-confirm-content p.text-slate-200 {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    margin-bottom: 8px !important;
+    text-align: left !important;
+  }
+  #memory-confirm-content .bg-\[\#1e2552\]\/70 {
+    margin-bottom: 8px !important;
+    padding: 6px !important;
+    border-radius: 12px !important;
+  }
+  #memory-confirm-content .bg-\[\#1e2552\]\/70 span {
+    font-size: 9px !important;
+  }
+  #memory-confirm-content #btn-confirm-cancel {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+
+  /* 3. RANK UP POPUP CELEBRATION SIDE-BY-SIDE REFLOW */
+  #rank-up-content {
+    max-height: 94dvh !important;
+    max-width: 480px !important;
+    padding: 14px 16px !important;
+    display: grid !important;
+    grid-template-columns: auto 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    align-items: center !important;
+    gap: 6px 16px !important;
+    border-radius: 20px !important;
+    text-align: left !important;
+    overflow: hidden !important;
+  }
+  #rank-up-content > div:nth-child(1) {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+  #rank-up-content > div:nth-child(1) h3 {
+    font-size: 15px !important;
+  }
+  #rank-up-content > div:nth-child(2) {
+    grid-column: 1 !important;
+    grid-row: 1 / span 3 !important;
+    justify-self: center !important;
+    padding: 8px !important;
+  }
+  #rank-up-content > div:nth-child(2) svg {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  #rank-up-content > div:nth-child(3) {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+  #rank-up-content > div:nth-child(3) span {
+    font-size: 12px !important;
+    text-align: left !important;
+  }
+  #rank-up-content > div:nth-child(3) span:last-child {
+    font-size: 9.5px !important;
+    margin-top: 1px !important;
+  }
+  #rank-up-content > button {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    font-size: 11px !important;
+  }
+
+  /* 4. HIGH SCORE POPUP CELEBRATION SIDE-BY-SIDE REFLOW */
+  #highscore-popup-content {
+    max-height: 94dvh !important;
+    max-width: 460px !important;
+    padding: 14px 16px !important;
+    display: grid !important;
+    grid-template-columns: auto 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    align-items: center !important;
+    gap: 6px 16px !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+  }
+  #highscore-popup-content > div:nth-child(1) {
+    grid-column: 1 !important;
+    grid-row: 1 / span 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  #highscore-popup-content > div:nth-child(1) .p-3 {
+    padding: 6px !important;
+  }
+  #highscore-popup-content > div:nth-child(1) svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  #highscore-popup-content > div:nth-child(1) h3 {
+    font-size: 13px !important;
+    margin-top: 4px !important;
+    max-width: 110px !important;
+  }
+  #highscore-popup-content > div:nth-child(2) {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    padding: 4px 12px !important;
+  }
+  #highscore-popup-content > div:nth-child(2) span:first-child {
+    font-size: 8px !important;
+    margin-bottom: 0px !important;
+  }
+  #highscore-popup-content > div:nth-child(2) span:last-child {
+    font-size: 18px !important;
+  }
+  #highscore-popup-content > p {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+    padding: 0 !important;
+  }
+  #highscore-popup-content > button {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    font-size: 11px !important;
+  }
+
+  /* 5. RESET CONFIRMATION SIDE-BY-SIDE REFLOW */
+  #reset-confirm-content {
+    max-height: 94dvh !important;
+    max-width: 440px !important;
+    padding: 14px 16px !important;
+    display: grid !important;
+    grid-template-columns: auto 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    align-items: center !important;
+    gap: 6px 16px !important;
+    border-radius: 20px !important;
+    text-align: left !important;
+    overflow: hidden !important;
+  }
+  #reset-confirm-content > div:nth-child(1) {
+    grid-column: 1 !important;
+    grid-row: 1 / span 3 !important;
+    width: 36px !important;
+    height: 36px !important;
+  }
+  #reset-confirm-content > div:nth-child(1) svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  #reset-confirm-content > h3 {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    font-size: 14px !important;
+    text-align: left !important;
+  }
+  #reset-confirm-content > p {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+    padding: 0 !important;
+    text-align: left !important;
+  }
+  #reset-confirm-content > div:nth-child(4) {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+    margin-top: 4px !important;
+  }
+  #reset-confirm-content > div:nth-child(4) button {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    font-size: 11px !important;
+  }
+
+  /* 6. HOW TO PLAY SIDE-BY-SIDE REFLOW */
+  #how-to-play-content {
+    max-height: 94dvh !important;
+    max-width: 480px !important;
+    padding: 14px 16px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 16px !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+  }
+  #how-to-play-content > button {
+    top: 8px !important;
+    right: 8px !important;
+  }
+  #how-to-play-content > .flex.flex-col {
+    display: grid !important;
+    grid-template-columns: auto 1fr !important;
+    grid-template-rows: auto auto !important;
+    align-items: center !important;
+    gap: 6px 16px !important;
+    width: 100% !important;
+  }
+  #how-to-play-content > .flex.flex-col > .p-3 {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    padding: 6px !important;
+    margin-bottom: 0 !important;
+  }
+  #how-to-play-content > .flex.flex-col > .p-3 svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  #how-to-play-content > .flex.flex-col > h3 {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    font-size: 11px !important;
+    max-width: 100px !important;
+    text-align: center !important;
+    margin-top: -8px !important;
+  }
+  #how-to-play-content > .flex.flex-col > p {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    max-height: 96px !important;
+    font-size: 9.5px !important;
+    padding: 8px !important;
+  }
+  #how-to-play-content > .flex.flex-col > button {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    margin-top: 0 !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    font-size: 11px !important;
+  }
+
+  /* 7. MATCH CELEBRATION SCREEN COMPRESSION */
+  #victory-celebration-panel {
+    padding: 12px !important;
+    max-height: 100% !important;
+    border-radius: 20px !important;
+  }
+  #victory-celebration-panel .text-6xl {
+    font-size: 2.2rem !important;
+    margin-bottom: 2px !important;
+  }
+  #victory-celebration-panel h1 {
+    font-size: 1.35rem !important;
+  }
+  #victory-celebration-panel p {
+    margin-top: 2px !important;
+    font-size: 9px !important;
+  }
+
+  /* 8. SOLO MODE SCORE RESULTS PANEL SIDE-BY-SIDE REFLOW */
+  #memory-finished-panel {
+    padding: 14px 16px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 20px !important;
+  }
+  #memory-finished-panel > .flex-col {
+    display: grid !important;
+    grid-template-columns: 1fr 1.15fr !important;
+    grid-template-rows: auto auto !important;
+    align-items: center !important;
+    gap: 6px 16px !important;
+    max-width: 540px !important;
+    width: 100% !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(1) {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    justify-self: center !important;
+    padding: 6px !important;
+    margin-bottom: 0 !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(1) svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(2) {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    text-align: center !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(2) h3 {
+    font-size: 14px !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(2) p {
+    font-size: 9px !important;
+    line-height: 1.2 !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(3) {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    padding: 8px 10px !important;
+    border-radius: 12px !important;
+    margin-top: 0 !important;
+    font-size: 9.5px !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(3) > div:first-child {
+    padding-bottom: 2px !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(3) .space-y-2\.5 {
+    gap: 2px !important;
+    space-y: 0 !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(3) .space-y-2\.5 > div {
+    margin-bottom: 0 !important;
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(3) .font-mono.text-lg {
+    font-size: 13px !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(4) {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    margin-top: 0 !important;
+  }
+  #memory-finished-panel > .flex-col > div:nth-child(4) button {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+    font-size: 11px !important;
+    max-width: none !important;
+  }
+
+  /* 9. VS BOT & 2 PLAYERS MATCH RESULTS PANEL SIDE-BY-SIDE REFLOW */
+  #memory-finished-panel-2p {
+    padding: 14px 16px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 20px !important;
+  }
+  #memory-finished-panel-2p > .flex-col {
+    display: grid !important;
+    grid-template-columns: 1fr 1.15fr !important;
+    grid-template-rows: auto auto !important;
+    align-items: center !important;
+    gap: 6px 16px !important;
+    max-width: 540px !important;
+    width: 100% !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(1) {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    justify-self: center !important;
+    padding: 6px !important;
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(1) svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(2) {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    text-align: center !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(2) h3 {
+    font-size: 14px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(2) p {
+    font-size: 9px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    padding: 8px 10px !important;
+    border-radius: 12px !important;
+    margin-top: 0 !important;
+    font-size: 9.5px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) > div:first-child {
+    padding-bottom: 2px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) .flex.flex-col.gap-3 {
+    gap: 4px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) .p-2\.5 {
+    padding: 4px 6px !important;
+    border-radius: 8px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) .text-xl {
+    font-size: 13px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) .p-3 {
+    padding: 3px !important;
+    border-radius: 6px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) .text-lg {
+    font-size: 11px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(3) .w-5.h-5 {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(4) {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    margin-top: 0 !important;
+  }
+  #memory-finished-panel-2p > .flex-col > div:nth-child(4) button,
+  #memory-finished-panel-2p > .flex-col > div:nth-child(4) div {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+    font-size: 11px !important;
+    max-width: none !important;
+    margin-top: 0 !important;
+  }
+}
+
+/* ==========================================================================
+   UNIFIED RESPONSIVE SYSTEM FOR TABLET PORTRAIT
+   ========================================================================== */
+
+/* Outer container rules for Tablet Portrait */
+.game-viewport-container.is-tablet-portrait {
+  padding: clamp(12px, 2.5vw, 24px) !important; /* Safe margins on all sides */
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  width: 100vw !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Game frame rules for Tablet Portrait */
+#poki-game-frame.is-tablet-portrait {
+  aspect-ratio: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 680px !important; /* Elegant tablet size limit */
+  max-height: 1020px !important;
+  margin: auto !important;
+  border-radius: 24px !important;
+  border-width: 2px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.12) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* Ensure inside main layout fills the frame completely */
+.is-tablet-portrait main {
+  padding: 0px !important;
+  margin: 0px !important;
+  height: 100% !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  flex: 1 !important;
+}
+
+/* Make tab containers stretch 100% height inside tablet portrait */
+.is-tablet-portrait #match-container-wrapper,
+.is-tablet-portrait #memory-container-wrapper {
+  height: 100% !important;
+  min-height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 0 !important;
+}
+
+/* Style Tablet Portrait board cards inside the game frame */
+.is-tablet-portrait #match-board-card,
+.is-tablet-portrait #memory-board-card {
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  border-radius: 20px !important; /* Keep nice inner border radius */
+  border-width: 0px !important; /* Clean outer edge */
+  margin: 0 !important;
+  padding-top: clamp(12px, 2vh, 20px) !important;
+  padding-left: clamp(12px, 2.5vw, 24px) !important;
+  padding-right: clamp(12px, 2.5vw, 24px) !important;
+  /* Extra space at bottom to prevent branding footer overlap on tablets */
+  padding-bottom: calc(clamp(48px, 6.5vh, 64px) + env(safe-area-inset-bottom, 8px)) !important;
+}
+
+/* Tablet Portrait Branding Footer */
+.is-tablet-portrait .poki-branding-footer {
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding-left: clamp(16px, 2.5vh, 24px) !important;
+  padding-right: clamp(16px, 2.5vh, 24px) !important;
+  padding-top: clamp(10px, 1.8vh, 14px) !important;
+  padding-bottom: calc(clamp(10px, 1.8vh, 14px) + env(safe-area-inset-bottom, 8px)) !important;
+  background: #ffffff !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-bottom-left-radius: 22px !important;
+  border-bottom-right-radius: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  z-index: 30 !important;
+  pointer-events: auto !important;
+}
+
+/* Scale matching and memory cards properly on tablet portrait screens */
+.is-tablet-portrait .poki-match-card {
+  max-width: clamp(100px, 16vh, 160px) !important;
+}
+
+
+
+.is-tablet-portrait #match-board-card .relative.z-20.flex.justify-between.items-center,
+.is-tablet-portrait #memory-board-card .relative.z-20.flex.justify-between.items-center {
+  margin-bottom: clamp(10px, 1.5vh, 18px) !important;
+  padding-bottom: clamp(6px, 1.2vh, 12px) !important;
+}
+
+/* ==========================================================================
+   IPAD PORTRAIT AND SHORT PORTRAIT TABLET OPTIMIZATIONS
+   ========================================================================== */
+@media (min-width: 640px) and (max-aspect-ratio: 1.45) {
+  /* Recalculate game viewport container paddings to squeeze in portrait tablets */
+  .game-viewport-container.is-tablet-portrait {
+    padding: clamp(8px, 1.8vw, 16px) !important;
+  }
+
+  /* Compact the game frame to fit shorter vertical aspect ratios perfectly */
+  #poki-game-frame.is-tablet-portrait {
+    max-width: clamp(540px, 86vw, 640px) !important;
+    max-height: calc(100vh - clamp(16px, 3.2vw, 24px)) !important;
+    max-height: calc(100dvh - clamp(16px, 3.2vw, 24px)) !important;
+    border-radius: 18px !important;
+  }
+
+  /* Squeeze margins & padding on match and memory boards */
+  .is-tablet-portrait #match-board-card,
+  .is-tablet-portrait #memory-board-card {
+    padding-top: clamp(8px, 1.4vh, 14px) !important;
+    padding-left: clamp(10px, 1.8vw, 16px) !important;
+    padding-right: clamp(10px, 1.8vw, 16px) !important;
+    padding-bottom: calc(clamp(36px, 5vh, 48px) + env(safe-area-inset-bottom, 8px)) !important;
+  }
+
+  /* Compact branding footer for iPads */
+  .is-tablet-portrait .poki-branding-footer {
+    padding-left: clamp(12px, 2vh, 18px) !important;
+    padding-right: clamp(12px, 2vh, 18px) !important;
+    padding-top: clamp(6px, 1.2vh, 10px) !important;
+    padding-bottom: calc(clamp(6px, 1.2vh, 10px) + env(safe-area-inset-bottom, 6px)) !important;
+    gap: 8px !important;
+  }
+
+  /* Adjust matching and memory card dimensions dynamically for the shorter screen */
+  .is-tablet-portrait .poki-match-card {
+    max-width: clamp(80px, 11.5vh, 125px) !important;
+  }
+
+
+
+  /* HUD Header optimizations */
+  .is-tablet-portrait #match-board-card .relative.z-20.flex.justify-between.items-center,
+  .is-tablet-portrait #memory-board-card .relative.z-20.flex.justify-between.items-center {
+    margin-bottom: clamp(6px, 1vh, 12px) !important;
+    padding-bottom: clamp(4px, 0.8vh, 8px) !important;
+  }
+
+  /* Settings Modal and other system dialogs containment */
+  .is-tablet-portrait #settings-modal-content,
+  .is-tablet-portrait #memory-confirm-content,
+  .is-tablet-portrait #rank-up-content,
+  .is-tablet-portrait #highscore-popup-content,
+  .is-tablet-portrait #reset-confirm-content {
+    max-height: 85vh !important;
+    max-height: 85dvh !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* Smooth orientation viewport switch transitions */
+.game-viewport-container {
+  transition: padding 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease-out !important;
+}
+
+#poki-game-frame {
+  transition: max-width 0.3s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.3s ease-out, box-shadow 0.3s ease-out !important;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+
+/* ==========================================================================
+   TABLET LANDSCAPE & DESKTOP RESPONSIVE SIDEBAR OVERRIDES
+   Ensures sidebar collapses cleanly to 0 width allowing play area to expand,
+   and maintains clear, legible text sizes when expanded.
+   ========================================================================== */
+
+/* 1. Ensure collapsed sidebar ALWAYS shrinks to 0 width across all breakpoints & screens */
+.sidebar-collapsed #poki-sidebar,
+#poki-game-frame.sidebar-collapsed #poki-sidebar,
+.game-viewport-container #poki-game-frame.sidebar-collapsed #poki-sidebar,
+.is-tablet-landscape #poki-game-frame.sidebar-collapsed #poki-sidebar {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  border-right: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+/* 2. Responsive layout for Tablet Landscape & Landscape PCs */
+@media (orientation: landscape) and (min-width: 640px) and (max-height: 900px),
+       screen and (min-width: 640px) and (max-width: 1366px) and (orientation: landscape) {
+
+  /* Expanded sidebar width in tablet landscape */
+  .is-tablet-landscape #poki-sidebar,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar {
+    width: 215px;
+    min-width: 215px;
+    max-width: 215px;
+    height: 100% !important;
+  }
+
+  /* Re-enforce zero width when collapsed specifically */
+  .is-tablet-landscape #poki-game-frame.sidebar-collapsed #poki-sidebar,
+  .game-viewport-container.is-tablet-landscape #poki-game-frame.sidebar-collapsed #poki-sidebar {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+  }
+
+  /* Inner container layout with clear spacing and touch-friendly scroll */
+  .is-tablet-landscape #poki-sidebar > div,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar > div {
+    padding: 10px 10px !important;
+    gap: 8px !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    justify-content: space-between !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin !important;
+  }
+
+  /* Legible typography & clear font sizes */
+  .is-tablet-landscape #poki-sidebar h1,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar h1 {
+    font-size: 12px !important;
+    letter-spacing: 0.03em !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar span,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar span {
+    font-size: 11px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar .text-\[9px\],
+  .is-tablet-landscape #poki-sidebar .text-\[8px\],
+  .game-viewport-container.is-tablet-landscape #poki-sidebar .text-\[9px\],
+  .game-viewport-container.is-tablet-landscape #poki-sidebar .text-\[8px\] {
+    font-size: 10px !important;
+  }
+
+  /* 1. Board Size Dropdown Menu: 2-Column Grid on Tablet Landscape */
+  .is-tablet-landscape #poki-sidebar #board-size-dropdown-menu,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #board-size-dropdown-menu {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    padding: 6px !important;
+    max-height: 220px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #board-size-dropdown-menu button,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #board-size-dropdown-menu button {
+    padding: 5px 6px !important;
+    font-size: 10px !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+  }
+
+  /* 2. Challenge Mode -> Rank Panel 20% Height & Spacing Optimization */
+  .is-tablet-landscape #poki-sidebar #vs-bot-rank-panel,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #vs-bot-rank-panel {
+    gap: 6px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #rank-badge-card,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-badge-card {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+    border-radius: 12px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #rank-badge-icon,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-badge-icon {
+    padding: 6px !important;
+    border-radius: 10px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #rank-badge-icon svg,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-badge-icon svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #rank-trophies-card,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-trophies-card {
+    padding: 6px 10px !important;
+    border-radius: 10px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #rank-progress-card,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-progress-card {
+    padding: 6px 10px !important;
+    gap: 4px !important;
+    border-radius: 10px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #rank-progress-card .h-3\.5,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-progress-card .h-3\.5 {
+    height: 8px !important;
+  }
+
+  /* Compact button padding to prevent overflow while keeping text large and readable */
+  .is-tablet-landscape #poki-sidebar button,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar button {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #btn-play-mode-trigger,
+  .is-tablet-landscape #poki-sidebar #btn-board-size-trigger,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #btn-play-mode-trigger,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #btn-board-size-trigger {
+    padding: 6px 10px !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar #btn-sidebar-how-to-play,
+  .is-tablet-landscape #poki-sidebar #btn-sidebar-shop,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #btn-sidebar-how-to-play,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #btn-sidebar-shop {
+    padding: 6px 10px !important;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s infinite linear;
+}
+
+

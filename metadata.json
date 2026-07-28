@@ -1,0 +1,8 @@
+{
+  "name": "Emoji BrainPop",
+  "description": "A fun and challenging memory match game. Flip cards to find matching pairs. Remember the positions of the cards you've seen. Match all pairs to win!",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
