@@ -22,8 +22,8 @@ export interface ThemeStyle {
 
 export const THEME_STYLES: Record<string, ThemeStyle> = {
   theme_midnight_blue: {
-    sidebar: 'bg-[#121633]/90 border-slate-700/40',
-    dialogBg: 'bg-[#1a1f3c]/95 border-slate-600/40',
+    sidebar: 'bg-gradient-to-b from-[#182046]/95 via-[#121738]/95 to-[#0c1028]/95 border-r border-[#5066c7]/50 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),0_12px_32px_rgba(4,8,24,0.5)]',
+    dialogBg: 'bg-gradient-to-b from-[#1c244f]/95 via-[#141a3c]/95 to-[#0c102b]/95 border-2 border-[#5066c7]/60 shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(80,102,199,0.15)]',
     buttonPrimary: 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30',
     buttonSecondary: 'bg-[#2b3775] hover:bg-[#34448e] text-slate-200 border border-[#546bbf]/40',
     accentText: 'text-cyan-400',
@@ -43,8 +43,8 @@ export const THEME_STYLES: Record<string, ThemeStyle> = {
     boardBorder: 'border-[#3f509d]/60 shadow-[0_16px_40px_rgba(10,14,35,0.5)]',
   },
   theme_spring: {
-    sidebar: 'bg-[#1e141b]/95 border-pink-900/40',
-    dialogBg: 'bg-[#271822]/95 border-pink-500/30',
+    sidebar: 'bg-gradient-to-b from-[#2d1928]/95 via-[#1d101a]/95 to-[#140b12]/95 border-r border-pink-500/40 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),0_12px_32px_rgba(24,8,18,0.5)]',
+    dialogBg: 'bg-gradient-to-b from-[#341d2e]/95 via-[#241420]/95 to-[#170c14]/95 border-2 border-pink-500/50 shadow-[0_24px_60px_rgba(24,8,18,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(236,72,153,0.15)]',
     buttonPrimary: 'bg-pink-600 hover:bg-pink-500 text-white font-bold shadow-lg shadow-pink-600/30',
     buttonSecondary: 'bg-[#2e3b32] hover:bg-[#394a3f] text-emerald-100 border border-emerald-500/30',
     accentText: 'text-emerald-400',
@@ -64,8 +64,8 @@ export const THEME_STYLES: Record<string, ThemeStyle> = {
     boardBorder: 'border-pink-500/50 shadow-[0_16px_40px_rgba(40,15,30,0.5)]',
   },
   theme_summer: {
-    sidebar: 'bg-[#1c1810]/95 border-amber-800/40',
-    dialogBg: 'bg-[#292215]/95 border-amber-500/30',
+    sidebar: 'bg-gradient-to-b from-[#312718]/95 via-[#1c160c]/95 to-[#120e07]/95 border-r border-amber-500/40 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),0_12px_32px_rgba(24,18,8,0.5)]',
+    dialogBg: 'bg-gradient-to-b from-[#3a2e1d]/95 via-[#251d11]/95 to-[#17120a]/95 border-2 border-amber-500/50 shadow-[0_24px_60px_rgba(24,18,8,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(245,158,11,0.15)]',
     buttonPrimary: 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold shadow-lg shadow-amber-500/25',
     buttonSecondary: 'bg-[#193247] hover:bg-[#20425e] text-sky-200 border border-sky-400/30',
     accentText: 'text-amber-400',
@@ -85,8 +85,8 @@ export const THEME_STYLES: Record<string, ThemeStyle> = {
     boardBorder: 'border-amber-500/50 shadow-[0_16px_40px_rgba(40,30,10,0.5)]',
   },
   theme_autumn: {
-    sidebar: 'bg-[#18110b]/95 border-orange-900/40',
-    dialogBg: 'bg-[#241910]/95 border-orange-600/30',
+    sidebar: 'bg-gradient-to-b from-[#2e1f13]/95 via-[#19100a]/95 to-[#100a06]/95 border-r border-orange-500/40 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),0_12px_32px_rgba(24,12,6,0.5)]',
+    dialogBg: 'bg-gradient-to-b from-[#382618]/95 via-[#22160e]/95 to-[#150d08]/95 border-2 border-orange-500/50 shadow-[0_24px_60px_rgba(24,12,6,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(249,115,22,0.15)]',
     buttonPrimary: 'bg-orange-600 hover:bg-orange-500 text-white font-extrabold shadow-lg shadow-orange-600/25',
     buttonSecondary: 'bg-[#382518] hover:bg-[#473020] text-amber-200 border border-amber-600/30',
     accentText: 'text-orange-400',
@@ -106,8 +106,8 @@ export const THEME_STYLES: Record<string, ThemeStyle> = {
     boardBorder: 'border-orange-600/50 shadow-[0_16px_40px_rgba(35,15,5,0.5)]',
   },
   theme_winter: {
-    sidebar: 'bg-[#0c131d]/95 border-sky-900/40',
-    dialogBg: 'bg-[#121c2b]/95 border-sky-500/30',
+    sidebar: 'bg-gradient-to-b from-[#162336]/95 via-[#0d1624]/95 to-[#070e17]/95 border-r border-sky-400/40 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),0_12px_32px_rgba(6,14,24,0.5)]',
+    dialogBg: 'bg-gradient-to-b from-[#1b2b42]/95 via-[#111c2c]/95 to-[#0a111b]/95 border-2 border-sky-400/50 shadow-[0_24px_60px_rgba(6,14,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(56,189,248,0.15)]',
     buttonPrimary: 'bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold shadow-lg shadow-sky-500/25',
     buttonSecondary: 'bg-[#1e2e42] hover:bg-[#283d57] text-sky-200 border border-sky-400/30',
     accentText: 'text-sky-300',
@@ -127,8 +127,8 @@ export const THEME_STYLES: Record<string, ThemeStyle> = {
     boardBorder: 'border-sky-400/50 shadow-[0_16px_40px_rgba(10,25,45,0.5)]',
   },
   theme_ocean: {
-    sidebar: 'bg-[#091522]/95 border-cyan-800/40',
-    dialogBg: 'bg-[#0e2033]/95 border-cyan-500/30',
+    sidebar: 'bg-gradient-to-b from-[#10273d]/95 via-[#0a1928]/95 to-[#05101a]/95 border-r border-cyan-500/40 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),0_12px_32px_rgba(5,16,26,0.5)]',
+    dialogBg: 'bg-gradient-to-b from-[#132f4a]/95 via-[#0c1f31]/95 to-[#06121d]/95 border-2 border-cyan-500/50 shadow-[0_24px_60px_rgba(5,16,26,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(6,182,212,0.15)]',
     buttonPrimary: 'bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-600/30',
     buttonSecondary: 'bg-[#16354d] hover:bg-[#1d4463] text-cyan-100 border border-cyan-400/30',
     accentText: 'text-cyan-300',
@@ -148,8 +148,8 @@ export const THEME_STYLES: Record<string, ThemeStyle> = {
     boardBorder: 'border-cyan-500/50 shadow-[0_16px_40px_rgba(5,25,40,0.5)]',
   },
   theme_desert: {
-    sidebar: 'bg-[#17110d]/95 border-amber-900/40',
-    dialogBg: 'bg-[#251b14]/95 border-amber-600/30',
+    sidebar: 'bg-gradient-to-b from-[#2d2017]/95 via-[#18110c]/95 to-[#100a07]/95 border-r border-amber-600/40 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),0_12px_32px_rgba(24,14,8,0.5)]',
+    dialogBg: 'bg-gradient-to-b from-[#38281d]/95 via-[#221811]/95 to-[#150e0a]/95 border-2 border-amber-600/50 shadow-[0_24px_60px_rgba(24,14,8,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(217,119,6,0.15)]',
     buttonPrimary: 'bg-[#d97706] hover:bg-[#b45309] text-white font-extrabold shadow-lg shadow-amber-600/25',
     buttonSecondary: 'bg-[#1e3230] hover:bg-[#274240] text-teal-200 border border-teal-500/30',
     accentText: 'text-teal-300',

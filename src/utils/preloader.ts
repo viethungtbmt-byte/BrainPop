@@ -6,10 +6,8 @@ import { UNIQUE_EMOJIS } from "../emoji/emojis";
 import { EMBEDDED_PAIRS } from "../emoji/related";
 import { COSMETIC_ITEMS } from "../itemShop/itemData";
 import { synth } from "../audio";
+import gameLogo from "../assets/images/emoji_brainpop_thumb_1784707895737.jpg";
 import logoIcon from "../assets/thumbnails/icon-256.png";
-import thumb512 from "../assets/thumbnails/thumbnail-512.png";
-import thumb1024 from "../assets/thumbnails/thumbnail-1024.png";
-import concept1 from "../assets/thumbnails/concept-1-1024.png";
 
 export interface PreloadProgressState {
   percentage: number; // 0 to 100
@@ -32,6 +30,13 @@ interface PreloadManifestItem {
 // Complete list of essential assets to preload
 const ASSET_MANIFEST: PreloadManifestItem[] = [
   {
+    id: "game-logo",
+    taskName: "Preloading Game Artwork & Textures...",
+    url: gameLogo,
+    estimatedBytes: 661504,
+    type: "image",
+  },
+  {
     id: "logo-icon",
     taskName: "Loading Game Icon & UI Badges...",
     url: logoIcon,
@@ -39,60 +44,39 @@ const ASSET_MANIFEST: PreloadManifestItem[] = [
     type: "image",
   },
   {
-    id: "thumb-512",
-    taskName: "Preloading Display Artwork...",
-    url: thumb512,
-    estimatedBytes: 405216,
-    type: "image",
-  },
-  {
-    id: "thumb-1024",
-    taskName: "Caching High-Res Promotional Textures...",
-    url: thumb1024,
-    estimatedBytes: 1366414,
-    type: "image",
-  },
-  {
-    id: "concept-1",
-    taskName: "Preparing Game Cards & Backgrounds...",
-    url: concept1,
-    estimatedBytes: 1366414,
-    type: "image",
-  },
-  {
     id: "locales",
     taskName: "Loading Language Bundles (16 Locales)...",
-    estimatedBytes: 480000,
+    estimatedBytes: 320000,
     type: "locales",
   },
   {
     id: "emoji-db",
     taskName: "Parsing Emoji Database & Memory Relations...",
-    estimatedBytes: 380000,
+    estimatedBytes: 280000,
     type: "data",
   },
   {
     id: "fonts",
     taskName: "Verifying Fonts & UI Graphics...",
-    estimatedBytes: 320000,
+    estimatedBytes: 220000,
     type: "fonts",
   },
   {
     id: "audio-synth",
     taskName: "Initializing Synthesizer & Audio Engine...",
-    estimatedBytes: 850000,
+    estimatedBytes: 450000,
     type: "audio",
   },
   {
     id: "shop-data",
     taskName: "Initializing Customization & Shop Data...",
-    estimatedBytes: 250000,
+    estimatedBytes: 180000,
     type: "data",
   },
 ];
 
 // Calculate total estimated bytes
-const TOTAL_ESTIMATED_BYTES = ASSET_MANIFEST.reduce(
+export const TOTAL_ESTIMATED_BYTES = ASSET_MANIFEST.reduce(
   (sum, item) => sum + item.estimatedBytes,
   0
 );

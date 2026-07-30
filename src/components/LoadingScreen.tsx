@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Brain, Sparkles, Zap } from "lucide-react";
-import { AssetPreloader, PreloadProgressState } from "../utils/preloader";
+import { AssetPreloader, PreloadProgressState, TOTAL_ESTIMATED_BYTES } from "../utils/preloader";
 import gameLogo from "../assets/images/emoji_brainpop_thumb_1784707895737.jpg";
 
 interface LoadingScreenProps {
@@ -12,7 +12,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
   const [targetState, setTargetState] = useState<PreloadProgressState>({
     percentage: 0,
     loadedBytes: 0,
-    totalBytes: 5200000,
+    totalBytes: TOTAL_ESTIMATED_BYTES,
     currentTaskName: "Connecting to Emoji Brainpop...",
     isComplete: false,
   });

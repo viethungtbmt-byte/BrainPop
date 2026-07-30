@@ -203,6 +203,21 @@ input, textarea, [contenteditable="true"] {
   background: #94a3b8;
 }
 
+/* Ensure poki-sidebar never renders a vertical scrollbar */
+#poki-sidebar,
+#poki-sidebar > div {
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+#poki-sidebar::-webkit-scrollbar,
+#poki-sidebar > div::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 /* --- PREMIUM VICTORY CELEBRATION STYLES & ANIMATIONS --- */
 
 @keyframes pop-bounce-float {
@@ -437,28 +452,28 @@ input, textarea, [contenteditable="true"] {
 
 @keyframes combo-pop-fade {
   0% {
-    transform: translate(-50%, -50%) scale(0.6) rotate(-5deg);
+    transform: scale(0.6) rotate(-5deg);
     opacity: 0;
   }
   15% {
-    transform: translate(-50%, -50%) scale(1.25) rotate(3deg);
+    transform: scale(1.25) rotate(3deg);
     opacity: 1;
   }
   30% {
-    transform: translate(-50%, -50%) scale(0.95) rotate(-2deg);
+    transform: scale(0.95) rotate(-2deg);
     opacity: 1;
   }
   45% {
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    transform: scale(1) rotate(0deg);
     opacity: 1;
   }
   75% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1) translateY(0);
+    transform: scale(1) translateY(0);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.85) translateY(-30px);
+    transform: scale(0.85) translateY(-30px);
   }
 }
 
@@ -692,13 +707,15 @@ input, textarea, [contenteditable="true"] {
   padding: 8px !important;
   gap: 8px !important;
   height: 100% !important;
-  overflow-y: auto !important;
-  /* Hide scrollbar track but allow scrolling */
-  scrollbar-width: none;
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 .is-mobile-landscape #poki-sidebar > div::-webkit-scrollbar {
-  display: none;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Reduce vertical gaps and sizing in landscape sidebar */
@@ -768,7 +785,10 @@ input, textarea, [contenteditable="true"] {
   #rank-up-backdrop,
   #highscore-popup-backdrop,
   #reset-confirm-backdrop,
-  #how-to-play-backdrop {
+  #how-to-play-backdrop,
+  #memory-finished-backdrop,
+  #memory-finished-2p-backdrop,
+  #victory-celebration-backdrop {
     padding: clamp(8px, 2vh, 16px) !important;
     display: flex !important;
     align-items: center !important;
@@ -1501,8 +1521,16 @@ input, textarea, [contenteditable="true"] {
     height: 100% !important;
     max-height: 100% !important;
     justify-content: space-between !important;
-    overflow-y: auto !important;
-    scrollbar-width: thin !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  .is-tablet-landscape #poki-sidebar > div::-webkit-scrollbar,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar > div::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
   /* Legible typography & clear font sizes */

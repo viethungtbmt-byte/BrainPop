@@ -15,6 +15,7 @@ import { synth } from '../audio';
 import { TRANSLATIONS } from '../locales';
 import { getInventoryState, unlockItem } from './inventory';
 import { adManager } from '../ads/AdManager';
+import { PanelBackground } from '../components/PanelBackground';
 
 interface ShopModalProps {
   isOpen: boolean;
@@ -46,8 +47,8 @@ const SHOP_THEME_STYLES: Record<string, {
   textSecondary: string;
 }> = {
   theme_midnight_blue: {
-    dialogBg: 'bg-[#1b224c]/95 border-[#5066c7]/50',
-    sidebarBg: 'bg-[#121633]/60 border-slate-700/40',
+    dialogBg: 'bg-gradient-to-b from-[#1c244f]/95 via-[#141a3c]/95 to-[#0c102b]/95 border-2 border-[#5066c7]/60 shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(80,102,199,0.15)]',
+    sidebarBg: 'bg-gradient-to-b from-[#151c3e]/90 to-[#0e122b]/95 border-r border-white/10',
     tabSelected: 'bg-gradient-to-r from-[#2c377a] to-[#394998] border-[#546bbf] text-cyan-300',
     tabUnselected: 'bg-[#1d244d]/30 hover:bg-[#1d244d]/80 text-slate-300 hover:text-slate-100 border-transparent',
     itemCardEquipped: 'bg-[#25326d]/70 border-cyan-500/80 shadow-[0_8px_20px_-2px_rgba(6,182,212,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
@@ -58,8 +59,8 @@ const SHOP_THEME_STYLES: Record<string, {
     textSecondary: 'text-slate-400',
   },
   theme_spring: {
-    dialogBg: 'bg-[#261622]/95 border-pink-500/40',
-    sidebarBg: 'bg-[#1b1018]/60 border-pink-900/40',
+    dialogBg: 'bg-gradient-to-b from-[#341d2e]/95 via-[#241420]/95 to-[#170c14]/95 border-2 border-pink-500/50 shadow-[0_24px_60px_rgba(24,8,18,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(236,72,153,0.15)]',
+    sidebarBg: 'bg-gradient-to-b from-[#251522]/90 to-[#140b12]/95 border-r border-pink-900/40',
     tabSelected: 'bg-gradient-to-r from-[#9d3a5b] to-[#be4b73] border-pink-400 text-pink-100',
     tabUnselected: 'bg-[#331a28]/30 hover:bg-[#331a28]/80 text-pink-200/80 hover:text-pink-100 border-transparent',
     itemCardEquipped: 'bg-[#422036]/80 border-emerald-400/80 shadow-[0_8px_20px_-2px_rgba(52,211,153,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
@@ -70,8 +71,8 @@ const SHOP_THEME_STYLES: Record<string, {
     textSecondary: 'text-pink-200/70',
   },
   theme_summer: {
-    dialogBg: 'bg-[#272013]/95 border-amber-500/40',
-    sidebarBg: 'bg-[#1a150c]/60 border-amber-900/40',
+    dialogBg: 'bg-gradient-to-b from-[#3a2e1d]/95 via-[#251d11]/95 to-[#17120a]/95 border-2 border-amber-500/50 shadow-[0_24px_60px_rgba(24,18,8,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(245,158,11,0.15)]',
+    sidebarBg: 'bg-gradient-to-b from-[#2b2215]/90 to-[#120e07]/95 border-r border-amber-900/40',
     tabSelected: 'bg-gradient-to-r from-[#b45309] to-[#d97706] border-amber-400 text-amber-100 font-extrabold',
     tabUnselected: 'bg-[#332817]/30 hover:bg-[#332817]/80 text-amber-200/80 hover:text-amber-100 border-transparent',
     itemCardEquipped: 'bg-[#42331c]/80 border-amber-400/80 shadow-[0_8px_20px_-2px_rgba(245,158,11,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
@@ -82,8 +83,8 @@ const SHOP_THEME_STYLES: Record<string, {
     textSecondary: 'text-amber-200/70',
   },
   theme_autumn: {
-    dialogBg: 'bg-[#23170e]/95 border-orange-600/40',
-    sidebarBg: 'bg-[#170f09]/60 border-orange-900/40',
+    dialogBg: 'bg-gradient-to-b from-[#382618]/95 via-[#22160e]/95 to-[#150d08]/95 border-2 border-orange-500/50 shadow-[0_24px_60px_rgba(24,12,6,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(249,115,22,0.15)]',
+    sidebarBg: 'bg-gradient-to-b from-[#291b10]/90 to-[#100a06]/95 border-r border-orange-900/40',
     tabSelected: 'bg-gradient-to-r from-[#9a3412] to-[#c2410c] border-orange-400 text-orange-100 font-extrabold',
     tabUnselected: 'bg-[#301c10]/30 hover:bg-[#301c10]/80 text-orange-200/80 hover:text-orange-100 border-transparent',
     itemCardEquipped: 'bg-[#402616]/80 border-orange-400/80 shadow-[0_8px_20px_-2px_rgba(234,88,12,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
@@ -94,8 +95,8 @@ const SHOP_THEME_STYLES: Record<string, {
     textSecondary: 'text-orange-200/70',
   },
   theme_winter: {
-    dialogBg: 'bg-[#111a28]/95 border-sky-500/40',
-    sidebarBg: 'bg-[#0a111a]/60 border-sky-900/40',
+    dialogBg: 'bg-gradient-to-b from-[#1b2b42]/95 via-[#111c2c]/95 to-[#0a111b]/95 border-2 border-sky-400/50 shadow-[0_24px_60px_rgba(6,14,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(56,189,248,0.15)]',
+    sidebarBg: 'bg-gradient-to-b from-[#142032]/90 to-[#070e17]/95 border-r border-sky-900/40',
     tabSelected: 'bg-gradient-to-r from-[#0369a1] to-[#0284c7] border-sky-300 text-white font-extrabold',
     tabUnselected: 'bg-[#172436]/30 hover:bg-[#172436]/80 text-sky-200/80 hover:text-sky-100 border-transparent',
     itemCardEquipped: 'bg-[#1e3047]/80 border-sky-300/80 shadow-[0_8px_20px_-2px_rgba(56,189,248,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
@@ -106,8 +107,8 @@ const SHOP_THEME_STYLES: Record<string, {
     textSecondary: 'text-sky-200/70',
   },
   theme_ocean: {
-    dialogBg: 'bg-[#0c1c2d]/95 border-cyan-500/40',
-    sidebarBg: 'bg-[#07121d]/60 border-cyan-900/40',
+    dialogBg: 'bg-gradient-to-b from-[#132f4a]/95 via-[#0c1f31]/95 to-[#06121d]/95 border-2 border-cyan-500/50 shadow-[0_24px_60px_rgba(5,16,26,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(6,182,212,0.15)]',
+    sidebarBg: 'bg-gradient-to-b from-[#0f243a]/90 to-[#05101a]/95 border-r border-cyan-900/40',
     tabSelected: 'bg-gradient-to-r from-[#0284c7] to-[#06b6d4] border-cyan-300 text-white font-extrabold',
     tabUnselected: 'bg-[#13283c]/30 hover:bg-[#13283c]/80 text-cyan-200/80 hover:text-cyan-100 border-transparent',
     itemCardEquipped: 'bg-[#183552]/80 border-cyan-300/80 shadow-[0_8px_20px_-2px_rgba(34,211,238,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
@@ -118,8 +119,8 @@ const SHOP_THEME_STYLES: Record<string, {
     textSecondary: 'text-cyan-200/70',
   },
   theme_desert: {
-    dialogBg: 'bg-[#221812]/95 border-amber-600/40',
-    sidebarBg: 'bg-[#150f0b]/60 border-amber-900/40',
+    dialogBg: 'bg-gradient-to-b from-[#38281d]/95 via-[#221811]/95 to-[#150e0a]/95 border-2 border-amber-600/50 shadow-[0_24px_60px_rgba(24,14,8,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(217,119,6,0.15)]',
+    sidebarBg: 'bg-gradient-to-b from-[#291d15]/90 to-[#100a07]/95 border-r border-amber-900/40',
     tabSelected: 'bg-gradient-to-r from-[#b45309] to-[#d97706] border-amber-400 text-amber-100 font-extrabold',
     tabUnselected: 'bg-[#302117]/30 hover:bg-[#302117]/80 text-amber-200/80 hover:text-amber-100 border-transparent',
     itemCardEquipped: 'bg-[#402b1f]/80 border-teal-400/80 shadow-[0_8px_20px_-2px_rgba(45,212,191,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
@@ -416,13 +417,12 @@ export const ShopModal: React.FC<ShopModalProps> = ({
     >
       <div 
         id="shop-modal-content"
-        className={`border-2 flex flex-col shadow-[0_24px_60px_rgba(8,12,32,0.6),inset_0_2px_4px_rgba(255,255,255,0.15)] relative overflow-hidden transition-all duration-300 transform w-[96%] max-w-4xl h-[90%] max-h-[600px] rounded-3xl ${
+        className={`border-2 flex flex-col relative overflow-hidden transition-all duration-300 transform w-[96%] max-w-4xl h-[90%] max-h-[600px] rounded-3xl ${
           isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
         } ${tStyle.dialogBg} ${tStyle.textPrimary}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Rainbow gradient border line */}
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-indigo-500 to-amber-400 z-10"></div>
+        <PanelBackground showTopBar={true} />
         
         {/* Modal Header */}
         <div className="flex-shrink-0 flex items-center justify-between border-b border-white/10 relative z-10 p-3.5 sm:p-4">

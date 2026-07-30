@@ -36,10 +36,27 @@ import {
   Palette,
   Globe,
   Video,
-  Lightbulb
+  Lightbulb,
+  Lock,
+  Unlock
 } from "lucide-react";
 import { CanvasCard } from "./components/CanvasCard";
 import { MemoryCard } from "./components/MemoryCard";
+import { MobileLandscapeMenu } from "./components/engine/MobileLandscapeMenu";
+import { GameHUD, PlayerScoreHUD } from "./components/engine/GameHUD";
+import { GameViewportFrame } from "./components/engine/GameViewportFrame";
+import { SettingsModal } from "./components/modals/SettingsModal";
+import { ResetConfirmModal } from "./components/modals/ResetConfirmModal";
+import { HintModal } from "./components/modals/HintModal";
+import { PauseOverlay } from "./components/modals/PauseOverlay";
+import { LoadingAdOverlay } from "./components/modals/LoadingAdOverlay";
+import { MemoryFinishedModal } from "./components/modals/MemoryFinishedModal";
+import { MemoryBoardGrid } from "./components/game/MemoryBoardGrid";
+import { MatchConnectionBoard } from "./components/game/MatchConnectionBoard";
+import { GentleSnowUnlockModal } from "./components/modals/GentleSnowUnlockModal";
+import { GameStartConfirmModal } from "./components/modals/GameStartConfirmModal";
+import { RankUpModal } from "./components/modals/RankUpModal";
+import { HighScoreModal } from "./components/modals/HighScoreModal";
 import { TRANSLATIONS, Language } from "./locales";
 import { adManager } from "./ads/AdManager";
 import { 
@@ -81,6 +98,9 @@ import {
 } from "./utils/gameRules";
 import { useLayoutConfig } from "./hooks/useLayoutConfig";
 import { LoadingScreen } from "./components/LoadingScreen";
+import { PanelBackground } from "./components/PanelBackground";
+
+export type BoardSizeKey = "3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8";
 
 export default function App() {
   // Preloader state
@@ -115,14 +135,74 @@ export default function App() {
   const [showGentleSnowModal, setShowGentleSnowModal] = useState<boolean>(false);
   const [shopHighlightItemId, setShopHighlightItemId] = useState<string | null>(null);
 
-  // One-time interactive gameplay demonstration state for first-time players
-  const [isDemoRunning, setIsDemoRunning] = useState<boolean>(false);
+  // One-time interactive guided tutorial state for first-time players
+  const [tutorialStep, setTutorialStep] = useState<number>(0); // 0 = inactive, 1 = tap Card A, 2 = tap Card B
+  const [tutorialCardA, setTutorialCardA] = useState<number>(-1);
+  const [tutorialCardB, setTutorialCardB] = useState<number>(-1);
   const demoHasStartedRef = useRef<boolean>(false);
 
   // Poki Rewarded Ads state
   const [classicAdWatched, setClassicAdWatched] = useState<boolean>(false);
   const [challengeAdWatched, setChallengeAdWatched] = useState<boolean>(false);
   const [isWatchingAd, setIsWatchingAd] = useState<boolean>(false);
+
+  // Board Size 48-Hour Ad Unlock State per board size (Classic & 2 Players Modes)
+  const [boardSizeUnlocks, setBoardSizeUnlocks] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("emoji_brainpop_board_size_unlocks");
+      if (saved) return JSON.parse(saved);
+      // Migration from old single key if present
+      const oldSaved = localStorage.getItem("emoji_brainpop_board_sizes_unlocked_until");
+      if (oldSaved) {
+        const ts = parseInt(oldSaved, 10);
+        if (ts > Date.now()) {
+          return { "6x6": ts, "6x8": ts };
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return {};
+  });
+
+  const isBoardSizeUnlocked = (sizeKey: string, mode: string = memoryMode) => {
+    // Challenge Mode (vsBot) is completely unaffected (trophy based)
+    if (mode === "vsBot") return true;
+    // Classic & 2 Players: 36 Cards ("6x6") and 48 Cards ("6x8") require ad watch PER board size
+    if (sizeKey === "6x6" || sizeKey === "6x8") {
+      const until = boardSizeUnlocks[sizeKey] || 0;
+      return Date.now() < until;
+    }
+    return true;
+  };
+
+  const handleUnlockBoardSize = (targetSizeKey: string, onUnlocked?: () => void) => {
+    if (isWatchingAd) return;
+    synth.playSelect();
+    handleRewardedAd(() => {
+      const newUntil = Date.now() + 48 * 60 * 60 * 1000; // 48 hours
+      setBoardSizeUnlocks((prev) => {
+        const updated = { ...prev, [targetSizeKey]: newUntil };
+        localStorage.setItem("emoji_brainpop_board_size_unlocks", JSON.stringify(updated));
+        return updated;
+      });
+      synth.playRankUp();
+      if (onUnlocked) {
+        onUnlocked();
+      } else {
+        setDifficulty(targetSizeKey);
+        generateMemoryGame(targetSizeKey as any);
+      }
+    });
+  };
+
+  const getRemainingBoardSizeUnlockTimeText = (sizeKey: string) => {
+    const until = boardSizeUnlocks[sizeKey] || 0;
+    if (Date.now() >= until) return "";
+    const diffMs = until - Date.now();
+    const hoursLeft = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
+    return `${hoursLeft}h`;
+  };
 
   // Equipped cosmetic effect state
   const [equippedEffect, setEquippedEffectState] = useState<CosmeticEffectType | null>(() => getEquippedEffect());
@@ -1026,11 +1106,21 @@ export default function App() {
       } else {
         actualDiff = "5x5";
       }
+      if (!isBoardSizeUnlocked(actualDiff, "twoPlayers")) {
+        actualDiff = "5x5";
+      }
       if (difficulty !== actualDiff) {
         setDifficulty(actualDiff);
       }
     } else if (memoryMode === "vsBot") {
       actualDiff = getBoardSizeForTrophies(vsBotTrophies);
+      if (difficulty !== actualDiff) {
+        setDifficulty(actualDiff);
+      }
+    } else {
+      if (!isBoardSizeUnlocked(actualDiff, "solo")) {
+        actualDiff = "3x4";
+      }
       if (difficulty !== actualDiff) {
         setDifficulty(actualDiff);
       }
@@ -1046,6 +1136,10 @@ export default function App() {
     setMemoryFinished(false);
     setMemoryBusy(false);
     setIsPaused(false);
+    if (localStorage.getItem("emoji_brainpop_demo_played") !== "true") {
+      demoHasStartedRef.current = false;
+      setTutorialStep(0);
+    }
     setShowVictoryCelebration(false);
     setFadeCelebrationOut(false);
     setShowScoreSummary(false);
@@ -1220,7 +1314,7 @@ export default function App() {
     }
   }, [activeTab]);
 
-  // One-time interactive gameplay demonstration sequence for first-time players
+  // One-time interactive guided tutorial sequence for first-time players
   useEffect(() => {
     const hasPlayedDemo = localStorage.getItem("emoji_brainpop_demo_played") === "true";
     if (
@@ -1232,66 +1326,35 @@ export default function App() {
       memoryCards.length === 12 &&
       !memoryFinished
     ) {
-      demoHasStartedRef.current = true;
-      setIsDemoRunning(true);
+      const cardAIndex = 0;
+      const cardAEmoji = memoryCards[cardAIndex];
+      const cardBIndex = memoryCards.findIndex((e, idx) => idx !== cardAIndex && e === cardAEmoji && e !== "BLOCKED");
 
-      const c1 = 0;
-      const emoji1 = memoryCards[c1];
-
-      let c2 = -1;
-      for (let i = 0; i < memoryCards.length; i++) {
-        if (memoryCards[i] !== emoji1 && memoryCards[i] !== "BLOCKED") {
-          c2 = i;
-          break;
-        }
-      }
-
-      let c3 = -1;
-      for (let i = 0; i < memoryCards.length; i++) {
-        if (i !== c1 && memoryCards[i] === emoji1) {
-          c3 = i;
-          break;
-        }
-      }
-
-      if (c2 !== -1 && c3 !== -1) {
-        let timer2: NodeJS.Timeout;
-        let timer3: NodeJS.Timeout;
-        let timer4: NodeJS.Timeout;
-
-        // 1. Reveal 1st card after brief initial delay
-        const timer1 = setTimeout(() => {
-          handleMemoryCardClick(c1, false, true);
-
-          // 2. Reveal 2nd card (non-matching)
-          timer2 = setTimeout(() => {
-            handleMemoryCardClick(c2, false, true);
-
-            // 3. Reveal 3rd card (matching 1st card)
-            timer3 = setTimeout(() => {
-              handleMemoryCardClick(c3, false, true);
-
-              // 4 & 5. Pair resolved, remaining unmatched card returns to normal state, restore control
-              timer4 = setTimeout(() => {
-                setIsDemoRunning(false);
-                localStorage.setItem("emoji_brainpop_demo_played", "true");
-              }, 800);
-            }, 1100);
-          }, 900);
-        }, 600);
-
-        return () => {
-          clearTimeout(timer1);
-          if (timer2) clearTimeout(timer2);
-          if (timer3) clearTimeout(timer3);
-          if (timer4) clearTimeout(timer4);
-        };
+      if (cardBIndex !== -1) {
+        demoHasStartedRef.current = true;
+        setTutorialCardA(cardAIndex);
+        setTutorialCardB(cardBIndex);
+        setTutorialStep(1); // Step 1: Highlight Card A and show finger pointer
       } else {
-        setIsDemoRunning(false);
         localStorage.setItem("emoji_brainpop_demo_played", "true");
       }
     }
-  }, [memoryCards, memoryMode, activeTab, difficulty, memoryFinished]);
+  }, [memoryCards.length, memoryMode, activeTab, difficulty, memoryFinished]);
+
+  // Advance guided tutorial from Step 1 -> Step 2 when Card A is flipped
+  useEffect(() => {
+    if (tutorialStep === 1 && tutorialCardA !== -1 && memoryFlipped.includes(tutorialCardA)) {
+      setTutorialStep(2); // Step 2: Highlight Card B (matching pair) and show finger pointer
+    }
+  }, [memoryFlipped, tutorialStep, tutorialCardA]);
+
+  // Complete guided tutorial when Card A and Card B match
+  useEffect(() => {
+    if (tutorialStep === 2 && (memoryMatched.includes(tutorialCardA) || memoryMatched.includes(tutorialCardB))) {
+      setTutorialStep(0);
+      localStorage.setItem("emoji_brainpop_demo_played", "true");
+    }
+  }, [memoryMatched, tutorialStep, tutorialCardA, tutorialCardB]);
 
   useEffect(() => {
     if (savedVsBotMatch) {
@@ -1933,10 +1996,12 @@ export default function App() {
       const basePoints = (memoryCards.length * 10) / 2;
       const timeBonus = (memoryTimeLeft > 0 ? memoryTimeLeft * 20 : 0) / 5;
       const flipEfficiencyBonus = Math.max(0, 1000 - currentMoves * 10) / 10;
-      const finalLevelScore = Math.round(basePoints + timeBonus + flipEfficiencyBonus);
+      const rawScore = Math.round(basePoints + timeBonus + flipEfficiencyBonus);
+      const potentialScore = rawScore * 2;
 
       const isSolo = memoryMode === "solo";
-      const isNewHigh = isSolo && finalLevelScore > memoryFlipState.highScore;
+      const currentHighScore = memoryFlipState.highScore;
+      const isPotentialNewHigh = isSolo && potentialScore > currentHighScore;
 
       if (isCompleted) {
         if (isSolo) {
@@ -1955,11 +2020,11 @@ export default function App() {
           }
 
           setMemoryFlipState(prev => {
-            const newScore = prev.score + finalLevelScore;
+            const newScore = prev.score + rawScore;
             const updated = {
               ...prev,
               score: newScore,
-              highScore: Math.max(prev.highScore, finalLevelScore)
+              highScore: Math.max(prev.highScore, rawScore)
             };
             localStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
             return updated;
@@ -1971,9 +2036,9 @@ export default function App() {
         setShowScoreSummary(true);
         setShowVictoryCelebration(false);
 
-        if (isNewHigh) {
+        if (isPotentialNewHigh) {
           synth.playHighScore();
-          setNewHighScoreValue(finalLevelScore);
+          setNewHighScoreValue(potentialScore);
           setShowHighScorePopup(true);
           triggerScreenShake();
         } else {
@@ -2007,7 +2072,10 @@ export default function App() {
     if (memoryBusy && !isDemoAction) return; // Block clicks during auto-flip delay
     if (memoryMatched.includes(clickedIdx)) return; // Already matched
     if (memoryFlipped.includes(clickedIdx)) return; // Already flipped state
-    if (isDemoRunning && !isDemoAction) return; // Block player input during interactive demonstration
+    
+    // Guided tutorial restrictions: only allow clicking the target card during tutorial steps
+    if (tutorialStep === 1 && clickedIdx !== tutorialCardA) return;
+    if (tutorialStep === 2 && clickedIdx !== tutorialCardB) return;
 
     if (memoryMode === "vsBot" && activePlayer === 2 && !isBotAction) return; // Block player clicks during BOT turn
 
@@ -2160,75 +2228,23 @@ export default function App() {
 
         handleMemoryMatchReward(newMatched.length, memoryMoves + 1, isCombo);
       } else {
-        // Keep both face-up so user sees them, waiting for the 3rd flip
-        setMemoryFlipped([firstIdx, clickedIdx]);
-      }
-    } 
-    else if (currentFlipped.length === 2) {
-      // New Rule: Player can flip a 3rd card if the first 2 did not match.
-      // Check if the 3rd card matches either the 1st OR the 2nd card
-      const firstIdx = currentFlipped[0];
-      const secondIdx = currentFlipped[1];
-
-      if (memoryCards[clickedIdx] === memoryCards[firstIdx]) {
-        // Match found with 1st card!
-        setMemoryBusy(true);
-        const nextCombo = comboCount + 1;
-        setComboCount(nextCombo);
-        const isCombo = nextCombo >= 2;
-        if (isCombo) {
-          synth.playCombo(nextCombo);
-        } else {
-          synth.playSuccess();
-        }
-        triggerScreenShake();
-        if (isCombo) {
-          triggerComboNotification(nextCombo);
-        }
-
-        const newMatched = [...memoryMatched, firstIdx, clickedIdx];
-        setMemoryMatched(newMatched);
-        setMatchedByP1(prev => [...prev, firstIdx, clickedIdx]);
-        setMemoryFlipped([]); // Clear flipped list. Non-matching 2nd card is turned back face down.
-
-        handleMemoryMatchReward(newMatched.length, memoryMoves + 1, isCombo);
-      } 
-      else if (memoryCards[clickedIdx] === memoryCards[secondIdx]) {
-        // Match found with 2nd card!
-        setMemoryBusy(true);
-        const nextCombo = comboCount + 1;
-        setComboCount(nextCombo);
-        const isCombo = nextCombo >= 2;
-        if (isCombo) {
-          synth.playCombo(nextCombo);
-        } else {
-          synth.playSuccess();
-        }
-        triggerScreenShake();
-        if (isCombo) {
-          triggerComboNotification(nextCombo);
-        }
-
-        const newMatched = [...memoryMatched, secondIdx, clickedIdx];
-        setMemoryMatched(newMatched);
-        setMatchedByP1(prev => [...prev, secondIdx, clickedIdx]);
-        setMemoryFlipped([]); // Clear flipped list. Non-matching 1st card is turned back face down.
-
-        handleMemoryMatchReward(newMatched.length, memoryMoves + 1, isCombo);
-      } 
-      else {
-        // No match! Show the 3rd card briefly, then immediately flip all 3 back down after a delay.
+        // No match! Show both cards face-up briefly, then flip both face-down after a short delay
         setComboCount(0);
-        setMemoryFlipped([firstIdx, secondIdx, clickedIdx]);
+        setMemoryFlipped([firstIdx, clickedIdx]);
         setMemoryBusy(true);
 
         setTimeout(() => {
           setMemoryFlipped([]);
           setMemoryBusy(false);
-        }, 750); // 750ms delay lets the user see the 3rd mismatch before automatic flip-back
+        }, 800);
       }
     }
   };
+
+  const handleMemoryCardClickRef = useRef(handleMemoryCardClick);
+  useEffect(() => {
+    handleMemoryCardClickRef.current = handleMemoryCardClick;
+  });
 
   // --- CLASSIC MODE HINT ACTION ---
   const handleOpenHintModal = () => {
@@ -2294,346 +2310,33 @@ export default function App() {
 
   const renderMobileLandscapeMenu = () => {
     return (
-      <div className="flex-1 flex flex-col justify-between min-h-0 h-full overflow-hidden gap-2 w-full max-w-4xl mx-auto text-slate-100 selection:bg-cyan-900 select-none">
-        {/* A. NESTED HEADER */}
-        <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 shrink-0 h-8">
-          {/* Logo and Name */}
-          <div className="flex items-center gap-1.5">
-            <div className="p-1 bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-lg text-white">
-              <Brain className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-[10.5px] font-black tracking-wider uppercase bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent">
-              Emoji BrainPop
-            </span>
-          </div>
-
-          {/* Trophies, Score, Shop, Settings, and Resume */}
-          <div className="flex items-center gap-1.5">
-            {/* Trophies badge - Battle Mode only */}
-            {memoryMode === "vsBot" && (
-              <div className="flex items-center gap-1 bg-[#1e2552]/60 border border-[#3f509d]/40 rounded-full px-2 py-0.5 text-[9px] font-black uppercase text-slate-300 shadow-inner">
-                <Trophy className="w-3 h-3 text-amber-500 animate-pulse" />
-                <span>TROPHIES</span>
-                <span className="text-amber-300 ml-0.5 font-mono">{vsBotTrophies}</span>
-              </div>
-            )}
-
-            {/* Classic score badge - Classic Mode only */}
-            {memoryMode === "solo" && (
-              <div className="flex items-center gap-1 bg-emerald-950/40 border border-emerald-500/30 rounded-full px-2 py-0.5 text-[9px] font-black uppercase text-emerald-300 shadow-inner">
-                <Award className="w-3 h-3 text-emerald-400 animate-pulse" />
-                <span>{t.totalScore.replace(":", "")}</span>
-                <span className="text-emerald-300 ml-0.5 font-mono">{currentScore}</span>
-              </div>
-            )}
-
-            {/* Shop Button */}
-            <button
-              id="btn-mobile-landscape-shop"
-              onClick={() => {
-                synth.playSelect();
-                setIsShopOpen(true);
-              }}
-              className="py-1 px-2.5 rounded-lg bg-gradient-to-b from-[#34448e]/80 to-[#25326d]/80 border border-[#546bbf]/40 hover:from-[#3a4ba1] hover:to-[#2b3a7a] text-slate-100 text-[9.5px] font-extrabold flex items-center gap-1 transition-all duration-200 focus:outline-none cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
-              title={t.shopTitle}
-            >
-              <Store className="w-3 h-3 text-amber-400" />
-              <span>{t.shopTitle}</span>
-            </button>
-
-            {/* Settings Button */}
-            <button
-              id="btn-mobile-landscape-settings"
-              onClick={() => {
-                synth.playSelect();
-                setIsSettingsOpen(true);
-              }}
-              className="py-1 px-2.5 rounded-lg bg-gradient-to-b from-[#34448e]/80 to-[#25326d]/80 border border-[#546bbf]/40 hover:from-[#3a4ba1] hover:to-[#2b3a7a] text-slate-100 text-[9.5px] font-extrabold flex items-center gap-1 transition-all duration-200 focus:outline-none cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
-              title={t.settingsTitleShort}
-            >
-              <Settings className="w-3 h-3 text-cyan-400" />
-              <span>{t.settingsTitleShort}</span>
-            </button>
-
-            {/* Resume Trigger */}
-            <button
-              id="btn-hud-resume-match"
-              onClick={() => {
-                synth.playSelect();
-                setIsMobileConfigOpen(false); // Close the Mobile Landscape Menu
-                setIsPaused(false); // Resume the game if it is paused
-              }}
-              className="py-1 px-3 rounded-lg bg-blue-600 border border-blue-500 hover:bg-blue-500 text-white text-[9.5px] font-extrabold uppercase tracking-wider cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 flex items-center gap-1 shadow-[0_4px_12px_rgba(37,99,235,0.35)] hover:shadow-[0_8px_18px_rgba(37,99,235,0.5)]"
-            >
-              <Play className="w-2.5 h-2.5 fill-current" />
-              <span>{t.resumeLabel}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* B. MAIN CONTENT: 2-COLUMN BENTO-STYLE GRID */}
-        <div className="flex-1 min-h-0 grid grid-cols-2 gap-3 pb-0.5">
-          {/* LEFT COLUMN: GAME MODE SELECTOR & OPTIONS */}
-          <div className="bg-[#303c81]/15 backdrop-blur-sm border border-slate-800/60 rounded-xl p-2.5 flex flex-col justify-between min-h-0 h-full gap-2 shadow-md">
-            <div className="flex items-center justify-between shrink-0">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">
-                {t.playModeTitle}
-              </span>
-            </div>
-
-            {/* Play Mode Buttons */}
-            <div className="grid grid-cols-3 gap-1.5 shrink-0 h-7.5">
-              {/* Battle Mode */}
-              <button
-                onClick={() => {
-                  synth.playSelect();
-                  if (memoryMode !== "vsBot") {
-                    const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
-                    setDifficulty(finalDiff);
-                    setMemoryMode("vsBot");
-                    generateMemoryGame(finalDiff);
-                  }
-                }}
-                className={`h-full rounded-lg text-[9.5px] font-black tracking-wide transition-all duration-200 border flex items-center justify-center gap-1.5 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                  memoryMode === "vsBot"
-                    ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
-                    : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850/80 shadow-[0_4px_12px_rgba(0,0,0,0.2)] font-bold"
-                }`}
-              >
-                <Bot className={`w-3.5 h-3.5 ${memoryMode === "vsBot" ? "text-slate-950" : "text-cyan-400"}`} />
-                <span>{t.modeBattle}</span>
-              </button>
-
-              {/* Classic Mode */}
-              <button
-                onClick={() => {
-                  synth.playSelect();
-                  if (memoryMode !== "solo") {
-                    setDifficulty("3x4");
-                    setMemoryMode("solo");
-                    generateMemoryGame("3x4");
-                  }
-                }}
-                className={`h-full rounded-lg text-[9.5px] font-black tracking-wide transition-all duration-200 border flex items-center justify-center gap-1.5 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                  memoryMode === "solo"
-                    ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
-                    : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850/80 shadow-[0_4px_12px_rgba(0,0,0,0.2)] font-bold"
-                }`}
-              >
-                <Zap className={`w-3.5 h-3.5 ${memoryMode === "solo" ? "text-slate-950" : "text-amber-400"}`} />
-                <span>{t.modeClassic}</span>
-              </button>
-
-              {/* 2 Player Mode */}
-              <button
-                onClick={() => {
-                  synth.playSelect();
-                  if (memoryMode !== "twoPlayers") {
-                    const finalDiff = (difficulty === "5x5" || difficulty === "5x6" || difficulty === "6x6") ? difficulty : "5x5";
-                    setDifficulty(finalDiff);
-                    setMemoryMode("twoPlayers");
-                    generateMemoryGame(finalDiff);
-                  }
-                }}
-                className={`h-full rounded-lg text-[9.5px] font-black tracking-wide transition-all duration-200 border flex items-center justify-center gap-1.5 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                  memoryMode === "twoPlayers"
-                    ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
-                    : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850/80 shadow-[0_4px_12px_rgba(0,0,0,0.2)] font-bold"
-                }`}
-              >
-                <Users className={`w-3.5 h-3.5 ${memoryMode === "twoPlayers" ? "text-slate-950" : "text-rose-400"}`} />
-                <span>{t.modeTwoPlayers}</span>
-              </button>
-            </div>
-
-            {/* Selected Mode Detail Container */}
-            <div className="flex-1 min-h-0 bg-slate-950/40 border border-slate-850 rounded-xl px-2.5 py-2 flex flex-col justify-center gap-1.5">
-              {memoryMode === "vsBot" && (
-                <div className="flex items-center justify-between w-full h-full gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded-lg border ${currentRank.bg} ${currentRank.border} ${currentRank.shadow} shadow-md shrink-0 flex items-center justify-center`}>
-                      {currentRank.badgeType === "shield" ? (
-                        <Shield className={`w-4 h-4 ${currentRank.color}`} fill={currentRank.fill} />
-                      ) : (
-                        <Crown className={`w-4 h-4 ${currentRank.color}`} fill={currentRank.fill} />
-                      )}
-                    </div>
-                    <div className="flex flex-col text-left">
-                      <span className="text-[7px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5">CURRENT RANK</span>
-                      <span className={`font-black text-[10px] uppercase ${currentRank.color} leading-none`}>
-                        {t[currentRank.nameKey]}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 flex flex-col gap-1">
-                    <div className="flex items-center justify-between text-[7px] font-black uppercase tracking-wider text-slate-300 px-0.5 leading-none">
-                      <span>RANK PROGRESS</span>
-                      <span className="font-sans text-cyan-400 font-black text-[8px] leading-none">
-                        {rankProgressDisplay}
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-950/80 rounded-full overflow-hidden border border-slate-800/60 relative shadow-inner">
-                      <div 
-                        className="h-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-fuchsia-500 rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${rankProgressPercentage}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {memoryMode === "solo" && (
-                <div className="flex flex-col gap-1.5 w-full justify-center">
-                  {/* Prominent Score Indicators for Landscape Mobile Menu */}
-                  <div className="grid grid-cols-2 gap-2 mb-1.5 shrink-0">
-                    <div className="flex items-center justify-between p-1 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-300">
-                      <span className="font-extrabold text-[8px] uppercase tracking-wider leading-none">{t.totalScore.replace(":", "")}</span>
-                      <span className="font-mono font-black text-[9.5px] bg-[#1e2552]/80 px-1.5 py-0.5 rounded border border-[#3f509d]/40 shadow-inner">{currentScore}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-1 px-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300">
-                      <span className="font-extrabold text-[8px] uppercase tracking-wider leading-none">{t.highScore.replace(":", "")}</span>
-                      <span className="font-mono font-black text-[9.5px] bg-[#1e2552]/80 px-1.5 py-0.5 rounded border border-[#3f509d]/40 shadow-inner">{currentHighScore}</span>
-                    </div>
-                  </div>
-
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-left leading-none">
-                    {t.challengeLevel}
-                  </span>
-                  <div className="grid grid-cols-6 gap-1 mt-0.5">
-                    {([
-                      { key: "3x4", label: t.boardSizeLabels["3x4"] },
-                      { key: "4x5", label: t.boardSizeLabels["4x5"] },
-                      { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                      { key: "5x6", label: t.boardSizeLabels["5x6"] },
-                      { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                      { key: "6x8", label: t.boardSizeLabels["6x8"] }
-                    ] as const).map((opt) => {
-                      const isSelected = difficulty === opt.key;
-                      return (
-                        <button
-                          key={opt.key}
-                          onClick={() => {
-                            synth.playSelect();
-                            if (difficulty !== opt.key) {
-                              setDifficulty(opt.key);
-                              setMemoryMode("solo");
-                              generateMemoryGame(opt.key);
-                            }
-                          }}
-                          className={`py-1 rounded-md text-[9px] font-black transition-all duration-200 border flex items-center justify-center cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                            isSelected
-                              ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
-                              : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {memoryMode === "twoPlayers" && (
-                <div className="flex flex-col justify-center w-full h-full gap-1">
-                  <div className="flex items-center justify-between w-full gap-2">
-                    <div className="grid grid-cols-2 gap-2 flex-1">
-                      {/* Player 1 */}
-                      <div className="flex items-center justify-between p-1 px-2 rounded-lg bg-slate-950/40 border border-white/5">
-                        <div className="flex items-center gap-1.5 text-slate-350">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_4px_rgba(96,165,250,0.8)] animate-pulse" />
-                          <span className="font-extrabold text-[8.5px] uppercase tracking-wider">P1</span>
-                        </div>
-                        <span className="text-blue-300 font-black text-[10px] font-mono bg-blue-950/40 px-1.5 py-0.5 rounded border border-blue-900/30">
-                          {winsP1}
-                        </span>
-                      </div>
-
-                      {/* Player 2 */}
-                      <div className="flex items-center justify-between p-1 px-2 rounded-lg bg-slate-950/40 border border-white/5">
-                        <div className="flex items-center gap-1.5 text-slate-350">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shadow-[0_0_4px_rgba(251,113,133,0.8)] animate-pulse" />
-                          <span className="font-extrabold text-[8.5px] uppercase tracking-wider">P2</span>
-                        </div>
-                        <span className="text-rose-300 font-black text-[10px] font-mono bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-900/30">
-                          {winsP2}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        synth.playSelect();
-                        setShowResetConfirm(true);
-                      }}
-                      className="py-1 px-2 rounded-lg bg-rose-950/60 border border-rose-900/30 text-rose-300 text-[8.5px] font-black uppercase tracking-wider cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shrink-0 shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
-                    >
-                      Reset
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between w-full gap-1">
-                    <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none shrink-0">
-                      {t.challengeLevel}
-                    </span>
-                    <div className="grid grid-cols-4 gap-1 flex-1 max-w-[200px]">
-                      {([
-                        { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                        { key: "5x6", label: t.boardSizeLabels["5x6"] },
-                        { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                        { key: "6x8", label: t.boardSizeLabels["6x8"] }
-                      ] as const).map((opt) => {
-                        const isSelected = difficulty === opt.key;
-                        return (
-                          <button
-                            key={opt.key}
-                            onClick={() => {
-                              synth.playSelect();
-                              if (difficulty !== opt.key) {
-                                setDifficulty(opt.key);
-                                setMemoryMode("twoPlayers");
-                                generateMemoryGame(opt.key);
-                              }
-                            }}
-                            className={`py-0.5 rounded text-[8px] font-black transition-all duration-200 border flex items-center justify-center cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                              isSelected
-                                ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
-                                : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN: REUSED GAME MODE INSTRUCTIONS */}
-          <div className="bg-[#303c81]/15 backdrop-blur-sm border border-slate-800/60 rounded-xl p-3 flex flex-col gap-1.5 shadow-md h-full min-h-0 overflow-hidden">
-            <div className="flex items-center gap-2 font-black text-[10px] text-amber-400 shrink-0 uppercase tracking-widest pb-1 border-b border-slate-800/60">
-              {helpConfig.iconName === "SquareStack" ? (
-                <SquareStack className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              ) : helpConfig.iconName === "Users" ? (
-                <Users className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              ) : helpConfig.iconName === "Bot" ? (
-                <Bot className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              ) : (
-                <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              )}
-              <span className="truncate">{helpConfig.title}</span>
-            </div>
-            
-            <p className="text-[8px] sm:text-[9.5px] leading-snug text-slate-350 whitespace-pre-line overflow-y-auto flex-1 pr-1 scrollbar-thin">
-              {helpConfig.rules}
-            </p>
-          </div>
-        </div>
-      </div>
+      <MobileLandscapeMenu
+        memoryMode={memoryMode}
+        vsBotTrophies={vsBotTrophies}
+        currentScore={currentScore}
+        currentHighScore={currentHighScore}
+        difficulty={difficulty}
+        t={t}
+        synth={synth}
+        setIsShopOpen={setIsShopOpen}
+        setIsSettingsOpen={setIsSettingsOpen}
+        setIsMobileConfigOpen={setIsMobileConfigOpen}
+        setIsPaused={setIsPaused}
+        getBoardSizeForTrophies={getBoardSizeForTrophies}
+        setDifficulty={setDifficulty}
+        setMemoryMode={setMemoryMode}
+        generateMemoryGame={generateMemoryGame}
+        currentRank={currentRank}
+        rankProgressDisplay={rankProgressDisplay}
+        rankProgressPercentage={rankProgressPercentage}
+        isBoardSizeUnlocked={isBoardSizeUnlocked}
+        getRemainingBoardSizeUnlockTimeText={getRemainingBoardSizeUnlockTimeText}
+        handleUnlockBoardSize={handleUnlockBoardSize}
+        winsP1={winsP1}
+        winsP2={winsP2}
+        setShowResetConfirm={setShowResetConfirm}
+        helpConfig={helpConfig}
+      />
     );
   };
 
@@ -2713,7 +2416,8 @@ export default function App() {
             ? "sm:w-0 sm:border-r-0 sm:overflow-visible"
             : `${layoutConfig.sidebarWidthClass || "sm:w-[190px] md:sm:w-[215px] lg:sm:w-[240px]"} sm:h-full sm:border-r ${currentTheme.borderAccent || "border-slate-700/40"} sm:shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),4px_0_20px_rgba(0,0,0,0.12)]`
         }`}>
-          <div className={`flex-col justify-between flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden flex ${
+          <PanelBackground showTopBar={false} />
+          <div className={`flex-col justify-between flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden flex relative z-10 ${
             isSidebarCollapsed 
               ? "w-0 h-0 opacity-0 p-0 pointer-events-none" 
               : "w-full h-full p-3 gap-3 opacity-100"
@@ -3041,29 +2745,55 @@ export default function App() {
                             ]
                         ).map((opt) => {
                           const isSelected = difficulty === opt.key;
+                          const isLocked = !isBoardSizeUnlocked(opt.key, memoryMode);
+                          const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
                           return (
                             <button
                               key={opt.key}
                               id={`btn-board-size-opt-${opt.key}`}
                               onClick={() => {
-                                synth.playSelect();
                                 setIsBoardSizeDropdownOpen(false);
-                                if (difficulty !== opt.key) {
-                                  setPendingMemoryMode(memoryMode);
-                                  setPendingDifficulty(opt.key);
-                                  setShowMemoryConfirm(true);
+                                if (isLocked) {
+                                  handleUnlockBoardSize(opt.key, () => {
+                                    setPendingMemoryMode(memoryMode);
+                                    setPendingDifficulty(opt.key);
+                                    setShowMemoryConfirm(true);
+                                  });
+                                } else {
+                                  synth.playSelect();
+                                  if (difficulty !== opt.key) {
+                                    setPendingMemoryMode(memoryMode);
+                                    setPendingDifficulty(opt.key);
+                                    setShowMemoryConfirm(true);
+                                  }
                                 }
                               }}
                               className={`w-full py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-between cursor-pointer ${
                                 isSelected
                                   ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                                  : isLocked
+                                  ? "bg-slate-950/80 text-amber-300 border border-amber-500/40 hover:bg-amber-950/50"
                                   : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-[#34448e]/60 border border-transparent font-bold"
                               }`}
                             >
-                              <span>{opt.label}</span>
-                              {isSelected && (
-                                <div className="w-2 h-2 rounded-full bg-slate-950 shadow-sm" />
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                {isLocked ? (
+                                  <Video className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20 shrink-0" />
+                                ) : isSelected ? (
+                                  <div className="w-2 h-2 rounded-full bg-slate-950 shadow-sm shrink-0" />
+                                ) : null}
+                                <span>{opt.label}</span>
+                              </div>
+                              {isLocked ? (
+                                <div className="flex items-center gap-1 bg-amber-400/15 px-2 py-0.5 rounded border border-amber-400/30 text-amber-300 text-[9px] font-black uppercase tracking-wider">
+                                  <span>Watch Ad</span>
+                                  <span className="text-[8px] opacity-75">(48h)</span>
+                                </div>
+                              ) : remainingTime ? (
+                                <span className="text-[9px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">
+                                  {remainingTime} left
+                                </span>
+                              ) : null}
                             </button>
                           );
                         })}
@@ -3196,7 +2926,7 @@ export default function App() {
         </div>
 
         {/* GAME WORKSPACE INTERFACE */}
-        <main className="flex-1 min-h-0 w-full p-0.5 sm:p-4 flex flex-col justify-center relative bg-slate-950/15 overflow-hidden transition-all duration-300 ease-in-out">
+        <main className="flex-1 min-h-0 w-full p-0 sm:p-4 max-sm:p-0 max-sm:pt-0 flex flex-col justify-center relative bg-slate-950/15 overflow-hidden transition-all duration-300 ease-in-out">
           
           {/* Universal fixed Menu Button and Pause Button for Mobile & Tablet */}
           {layoutConfig.showTabletMenuToggle && (
@@ -3261,8 +2991,9 @@ export default function App() {
             >
               <div 
                 id="how-to-play-content"
-                className={`max-w-md w-full backdrop-blur-xl border-2 rounded-3xl p-6 shadow-[0_20px_50px_rgba(10,15,35,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)] relative ${currentTheme.dialogBg} ${currentTheme.borderAccent}`}
+                className={`max-w-md w-full backdrop-blur-xl border-2 rounded-3xl p-6 shadow-[0_20px_50px_rgba(10,15,35,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)] relative overflow-hidden ${currentTheme.dialogBg} ${currentTheme.borderAccent}`}
               >
+                <PanelBackground showTopBar={true} />
                 <button 
                   onClick={() => setIsHowToPlayOpen(false)}
                   className={`absolute top-4 right-4 p-1 rounded-lg transition-colors hover:bg-slate-500/10 ${currentTheme.textSecondary}`}
@@ -3303,16 +3034,17 @@ export default function App() {
             /* MOBILE CONFIG MENU SCREEN (FULL SCREEN) */
             <div 
               id="mobile-menu-container" 
-              className={`w-full h-full flex flex-col relative z-50 ${currentTheme.dialogBg} text-slate-100 animate-fade-in ${isMobileLandscape ? 'overflow-hidden justify-between p-2' : 'overflow-y-auto p-4'}`}
+              className={`w-full h-full flex flex-col relative z-50 ${currentTheme.dialogBg} text-slate-100 animate-fade-in ${!isPortrait ? 'overflow-hidden justify-between p-2 sm:p-4' : 'overflow-y-auto p-4'}`}
               style={{
-                paddingTop: isMobileLandscape ? '2px' : 'calc(env(safe-area-inset-top, 16px) + 8px)',
-                paddingBottom: isMobileLandscape ? 'calc(env(safe-area-inset-bottom, 8px) + 2px)' : 'calc(env(safe-area-inset-bottom, 16px) + 8px)',
-                paddingLeft: isMobileLandscape ? 'calc(env(safe-area-inset-left, 12px) + 4px)' : 'calc(env(safe-area-inset-left, 16px) + 8px)',
-                paddingRight: isMobileLandscape ? 'calc(env(safe-area-inset-right, 12px) + 4px)' : 'calc(env(safe-area-inset-right, 16px) + 8px)',
+                paddingTop: !isPortrait ? '8px' : 'calc(env(safe-area-inset-top, 16px) + 8px)',
+                paddingBottom: !isPortrait ? 'calc(env(safe-area-inset-bottom, 8px) + 2px)' : 'calc(env(safe-area-inset-bottom, 16px) + 8px)',
+                paddingLeft: !isPortrait ? 'calc(env(safe-area-inset-left, 12px) + 4px)' : 'calc(env(safe-area-inset-left, 16px) + 8px)',
+                paddingRight: !isPortrait ? 'calc(env(safe-area-inset-right, 12px) + 4px)' : 'calc(env(safe-area-inset-right, 16px) + 8px)',
               }}
             >
+              <PanelBackground showTopBar={true} />
               {/* Header with Title and Close button (Portrait Only) */}
-              {!isMobileLandscape && (
+              {isPortrait && (
                 <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-3 shrink-0">
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-xl text-white">
@@ -3336,7 +3068,7 @@ export default function App() {
                 </div>
               )}
 
-              {isMobileLandscape ? (
+              {!isPortrait ? (
                 renderMobileLandscapeMenu()
               ) : (
                 /* SINGLE UNIFIED RESPONSIVE LAYOUT FOR PORTRAIT */
@@ -3346,7 +3078,7 @@ export default function App() {
                     <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
                       {t.playModeLabel}
                     </span>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-[#1a234e]/60 backdrop-blur-sm border-2 border-[#3b4b91]/50 p-2.5 rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.25),inset_0_1.5px_1px_rgba(255,255,255,0.1)] grid grid-cols-3 gap-2">
                       {/* Classic */}
                       <button
                         onClick={() => {
@@ -3456,24 +3188,49 @@ export default function App() {
                             { key: "6x8", label: t.boardSizeLabels["6x8"] }
                           ] as const).map((opt) => {
                             const isSelected = difficulty === opt.key;
+                            const isLocked = !isBoardSizeUnlocked(opt.key, "solo");
+                            const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
                             return (
                               <button
                                 key={opt.key}
                                 onClick={() => {
-                                  synth.playSelect();
-                                  if (difficulty !== opt.key) {
-                                    setDifficulty(opt.key);
-                                    setMemoryMode("solo");
-                                    generateMemoryGame(opt.key);
+                                  if (isLocked) {
+                                    handleUnlockBoardSize(opt.key, () => {
+                                      setDifficulty(opt.key);
+                                      setMemoryMode("solo");
+                                      generateMemoryGame(opt.key);
+                                    });
+                                  } else {
+                                    synth.playSelect();
+                                    if (difficulty !== opt.key) {
+                                      setDifficulty(opt.key);
+                                      setMemoryMode("solo");
+                                      generateMemoryGame(opt.key);
+                                    }
                                   }
                                 }}
-                                className={`py-2 px-1 rounded-xl text-[11px] font-extrabold transition-all duration-200 border flex items-center justify-center cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
+                                className={`py-2 px-1 rounded-xl text-[11px] font-extrabold transition-all duration-200 border flex items-center justify-center gap-1 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
                                   isSelected
                                     ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black scale-102"
+                                    : isLocked
+                                    ? "bg-gradient-to-b from-slate-900/95 to-amber-950/50 text-amber-300 border-amber-500/50 hover:bg-amber-900/50 shadow-[0_2px_6px_rgba(245,158,11,0.2)]"
                                     : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
                                 }`}
                               >
-                                {opt.label}
+                                {isLocked ? (
+                                  <div className="flex items-center gap-1">
+                                    <Video className="w-3 h-3 text-amber-400 fill-amber-400/20 shrink-0" />
+                                    <span>{opt.label}</span>
+                                    <span className="text-[8px] font-black uppercase text-amber-300 bg-amber-400/20 px-1 py-0.2 rounded border border-amber-400/40">AD</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <span>{opt.label}</span>
+                                    {remainingTime && (
+                                      <span className="text-[8px] font-black text-amber-400 bg-amber-400/10 px-1 rounded">{remainingTime}</span>
+                                    )}
+                                  </div>
+                                )}
                               </button>
                             );
                           })}
@@ -3574,7 +3331,7 @@ export default function App() {
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                               {t.challengeLevel}
                             </span>
-                            <div className="grid grid-cols-4 gap-1.5">
+                            <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-1.5">
                               {([
                                 { key: "5x5", label: t.boardSizeLabels["5x5"] },
                                 { key: "5x6", label: t.boardSizeLabels["5x6"] },
@@ -3582,24 +3339,49 @@ export default function App() {
                                 { key: "6x8", label: t.boardSizeLabels["6x8"] }
                               ] as const).map((opt) => {
                                 const isSelected = difficulty === opt.key;
+                                const isLocked = !isBoardSizeUnlocked(opt.key, "twoPlayers");
+                                const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
                                 return (
                                   <button
                                     key={opt.key}
                                     onClick={() => {
-                                      synth.playSelect();
-                                      if (difficulty !== opt.key) {
-                                        setDifficulty(opt.key);
-                                        setMemoryMode("twoPlayers");
-                                        generateMemoryGame(opt.key);
+                                      if (isLocked) {
+                                        handleUnlockBoardSize(opt.key, () => {
+                                          setDifficulty(opt.key);
+                                          setMemoryMode("twoPlayers");
+                                          generateMemoryGame(opt.key);
+                                        });
+                                      } else {
+                                        synth.playSelect();
+                                        if (difficulty !== opt.key) {
+                                          setDifficulty(opt.key);
+                                          setMemoryMode("twoPlayers");
+                                          generateMemoryGame(opt.key);
+                                        }
                                       }
                                     }}
-                                    className={`py-1 rounded-lg text-[10px] font-black transition-all duration-200 border flex items-center justify-center cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
+                                    className={`py-1 rounded-lg text-[10px] font-black transition-all duration-200 border flex items-center justify-center gap-1 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
                                       isSelected
                                         ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                                        : isLocked
+                                        ? "bg-gradient-to-b from-slate-900/95 to-amber-950/50 text-amber-300 border-amber-500/50 hover:bg-amber-900/50 shadow-[0_2px_6px_rgba(245,158,11,0.2)]"
                                         : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
                                     }`}
                                   >
-                                    {opt.label}
+                                    {isLocked ? (
+                                      <div className="flex items-center gap-1">
+                                        <Video className="w-2.5 h-2.5 text-amber-400 fill-amber-400/20 shrink-0" />
+                                        <span>{opt.label}</span>
+                                        <span className="text-[7.5px] font-black uppercase text-amber-300 bg-amber-400/20 px-0.5 rounded border border-amber-400/40">AD</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1">
+                                        <span>{opt.label}</span>
+                                        {remainingTime && (
+                                          <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-0.5 rounded">{remainingTime}</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </button>
                                 );
                               })}
@@ -3645,8 +3427,8 @@ export default function App() {
                     </p>
                   </div>
 
-                  {/* System quick settings for consistency */}
-                  <div className="grid grid-cols-3 gap-2 shrink-0">
+                  {/* System quick settings inside shared 3D frame */}
+                  <div className="bg-[#1a234e]/60 backdrop-blur-sm border-2 border-[#3b4b91]/50 p-2.5 rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.25),inset_0_1.5px_1px_rgba(255,255,255,0.1)] grid grid-cols-3 gap-2 shrink-0">
                     {/* Sound Toggle */}
                     <button
                       onClick={() => { synth.playSelect(); setSoundOn(!soundOn); }}
@@ -3733,58 +3515,24 @@ export default function App() {
 
                   {/* Header info */}
                   {layoutConfig.showHUD ? (
-                    <div className="relative z-30 flex items-center justify-between gap-2 border-b border-white/10 pb-2 mb-2 w-full">
-                      {/* Left: Setup Menu Button */}
-                      <button
-                        id="btn-hud-menu-match"
-                        onClick={() => {
-                          synth.playSelect();
-                          setIsMobileConfigOpen(true);
-                          setIsPaused(true);
-                        }}
-                        className="py-1 px-2.5 rounded-2xl bg-gradient-to-b from-[#34448e] via-[#2a3877] to-[#212b5e] hover:from-[#3f52a8] hover:to-[#283573] border-2 border-[#546bbf]/60 text-slate-100 flex items-center gap-1.5 text-[10px] font-black tracking-wide cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-[0_5px_14px_rgba(0,0,0,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.45)]"
-                      >
-                        <Menu className="w-3.5 h-3.5 text-cyan-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]" />
-                        <span>Menu</span>
-                      </button>
-
-                      {/* Center: Live Stats Info (Compact) */}
-                      <div className="flex items-center gap-2 text-[10px] font-extrabold font-mono bg-slate-950/40 px-2.5 py-1 rounded-xl border border-white/5 text-cyan-300">
-                        <span>{t.stage} {level}</span>
-                      </div>
-
-                      {/* Right: Cables Connection, Pause and sound toggle */}
-                      <div className="flex items-center gap-2">
-                        <div className="text-[10px] font-extrabold font-mono bg-slate-950/40 px-2.5 py-1 rounded-xl border border-white/5 text-slate-200">
-                          {t.cables} <span className="text-cyan-400">{connections.length}/3</span>
-                        </div>
-
-                        {/* Pause Toggle */}
-                        <button
-                          id="btn-hud-pause-match"
-                          onClick={() => {
-                            if (isPaused) {
-                              synth.playResume();
-                            } else {
-                              synth.playPause();
-                            }
-                            setIsPaused(prev => !prev);
-                          }}
-                          className="p-1.5 rounded-lg bg-slate-950/80 border border-white/10 text-slate-200 cursor-pointer active:scale-95 transition-all"
-                          title={isPaused ? t.resumeBtn : t.pauseBtn}
-                        >
-                          {isPaused ? <Play className="w-3 h-3 fill-current text-emerald-400" /> : <Pause className="w-3 h-3 fill-current text-amber-400" />}
-                        </button>
-
-                        {/* Sound Toggle */}
-                        <button
-                          onClick={() => { synth.playSelect(); setSoundOn(!soundOn); }}
-                          className="p-1.5 rounded-lg bg-slate-950/80 border border-white/10 text-slate-200 cursor-pointer active:scale-95 transition-all"
-                        >
-                          {soundOn ? <Volume2 className="w-3 h-3 text-cyan-400" /> : <VolumeX className="w-3 h-3 text-rose-400" />}
-                        </button>
-                      </div>
-                    </div>
+                    <GameHUD
+                      layoutConfig={layoutConfig}
+                      synth={synth}
+                      setIsMobileConfigOpen={setIsMobileConfigOpen}
+                      setIsPaused={setIsPaused}
+                      isPaused={isPaused}
+                      activeTab={activeTab}
+                      memoryMode={memoryMode}
+                      vsBotTrophies={vsBotTrophies}
+                      winsP1={winsP1}
+                      winsP2={winsP2}
+                      currentScore={currentScore}
+                      level={level}
+                      t={t}
+                      connectionsCount={connections.length}
+                      soundOn={soundOn}
+                      setSoundOn={setSoundOn}
+                    />
                   ) : (
                     <div className="relative z-20 flex justify-between items-center mb-6 border-b border-teal-200/60 pb-3">
                       <div className="flex items-center gap-2">
@@ -4416,29 +4164,55 @@ export default function App() {
                             ]
                         ).map((opt) => {
                           const isSelected = difficulty === opt.key;
+                          const isLocked = !isBoardSizeUnlocked(opt.key, memoryMode);
+                          const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
                           return (
                             <button
                               key={opt.key}
                               id={`btn-board-size-mobile-opt-${opt.key}`}
                               onClick={() => {
-                                synth.playSelect();
                                 setIsBoardSizeDropdownOpenMobile(false);
-                                if (difficulty !== opt.key) {
-                                  setPendingMemoryMode(memoryMode);
-                                  setPendingDifficulty(opt.key);
-                                  setShowMemoryConfirm(true);
+                                if (isLocked) {
+                                  handleUnlockBoardSize(opt.key, () => {
+                                    setPendingMemoryMode(memoryMode);
+                                    setPendingDifficulty(opt.key);
+                                    setShowMemoryConfirm(true);
+                                  });
+                                } else {
+                                  synth.playSelect();
+                                  if (difficulty !== opt.key) {
+                                    setPendingMemoryMode(memoryMode);
+                                    setPendingDifficulty(opt.key);
+                                    setShowMemoryConfirm(true);
+                                  }
                                 }
                               }}
                               className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                                 isSelected
                                   ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                                  : isLocked
+                                  ? "bg-slate-900 text-amber-300 border border-amber-500/40 hover:bg-amber-950/50"
                                   : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-slate-900/40 border border-transparent font-bold"
                               }`}
                             >
-                              <span>{opt.label}</span>
-                              {isSelected && (
-                                <div className="w-2 h-2 rounded-full bg-slate-950 shadow-sm" />
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                {isLocked ? (
+                                  <Video className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20 shrink-0" />
+                                ) : isSelected ? (
+                                  <div className="w-2 h-2 rounded-full bg-slate-950 shrink-0" />
+                                ) : null}
+                                <span>{opt.label}</span>
+                              </div>
+                              {isLocked ? (
+                                <div className="flex items-center gap-1 bg-amber-400/15 px-2 py-0.5 rounded border border-amber-400/30 text-amber-300 text-[9px] font-black uppercase tracking-wider">
+                                  <span>Watch Ad</span>
+                                  <span className="text-[8px] opacity-75">(48h)</span>
+                                </div>
+                              ) : remainingTime ? (
+                                <span className="text-[9px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">
+                                  {remainingTime} left
+                                </span>
+                              ) : null}
                             </button>
                           );
                         })}
@@ -4478,13 +4252,14 @@ export default function App() {
             </div>
 
             {/* MEMORY CARDS BOARD GRID SYSTEM */}
-            <div 
-              id="memory-board-card"
-              className={`${layoutConfig.memoryBoardCardClass} ${currentTheme.boardBorder || ''} transition-all duration-500 ease-in-out relative overflow-hidden`}
-              style={{
-                background: currentTheme.boardBg || getBoardBackgroundStyle(equippedThemeId),
-              }}
-            >
+            <GameViewportFrame title="EMOJI BRAINPOP" variant="cyan">
+              <div 
+                id="memory-board-card"
+                className={`${layoutConfig.memoryBoardCardClass} ${currentTheme.boardBorder || ''} transition-all duration-500 ease-in-out relative overflow-hidden h-full rounded-lg`}
+                style={{
+                  background: currentTheme.boardBg || getBoardBackgroundStyle(equippedThemeId),
+                }}
+              >
               <EnvironmentalEffects effectType={equippedEffect} />
 
               {/* Soft Grid Texture */}
@@ -4499,97 +4274,28 @@ export default function App() {
               {/* Decorative radial premium background overlay */}
               <div className={`absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${currentTheme.boardRadialOverlay || 'from-sky-400/20 to-transparent'} pointer-events-none z-0 transition-all duration-500`}></div>
 
-              {/* UNIFIED HUD (MOBILE ONLY) */}
-              {layoutConfig.showHUD && (
-                <div className="relative z-30 flex items-center justify-between gap-2 border-b border-white/10 pb-2 mb-2 landscape:pb-1 landscape:mb-1.5 w-full shrink-0">
-                  {/* Left: Setup Menu Button */}
-                  <button
-                    id="btn-hud-menu"
-                    onClick={() => {
-                      synth.playSelect();
-                      setIsMobileConfigOpen(true);
-                      setIsPaused(true);
-                    }}
-                    className="py-1 px-2.5 rounded-2xl bg-gradient-to-b from-[#34448e] via-[#2a3877] to-[#212b5e] hover:from-[#3f52a8] hover:to-[#283573] border-2 border-[#546bbf]/60 text-slate-100 flex items-center gap-1.5 text-[10px] font-black tracking-wide cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-[0_5px_14px_rgba(0,0,0,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.45)]"
-                  >
-                    <Menu className="w-3.5 h-3.5 text-cyan-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]" />
-                    <span>Menu</span>
-                  </button>
-
-                  {/* Center: Live Stats Info (Compact) */}
-                  <div className="flex items-center gap-2 text-[10px] font-extrabold font-mono bg-slate-950/40 px-2.5 py-1 rounded-xl border border-white/5">
-                    {activeTab === "memory" ? (
-                      memoryMode === "vsBot" ? (
-                        <div className="flex items-center gap-1 text-amber-300">
-                          <Trophy className="w-3 h-3 text-amber-400" />
-                          <span>{vsBotTrophies} 🏆</span>
-                        </div>
-                      ) : memoryMode === "twoPlayers" ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-blue-300">P1: {winsP1}</span>
-                          <span className="text-slate-500">|</span>
-                          <span className="text-rose-300">P2: {winsP2}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-emerald-300">
-                          <span>{currentScore} pts</span>
-                        </div>
-                      )
-                    ) : (
-                      <div className="text-cyan-300">
-                        {t.stage} {level}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right: Grouped Action Icons */}
-                  <div className="flex items-center gap-1">
-                    {/* Pause & Hint Buttons for Solo mode */}
-                    {activeTab === "memory" && memoryMode === "solo" && !memoryFinished && (
-                      <>
-                        <button
-                          id="btn-hud-pause"
-                          onClick={() => {
-                            if (isPaused) {
-                              synth.playResume();
-                            } else {
-                              synth.playPause();
-                            }
-                            setIsPaused(prev => !prev);
-                          }}
-                          className="p-1.5 rounded-lg bg-slate-950/80 border border-white/10 text-slate-200 cursor-pointer active:scale-95 transition-all"
-                          title={isPaused ? t.resumeBtn : t.pauseBtn}
-                        >
-                          {isPaused ? <Play className="w-3 h-3 fill-current text-emerald-400" /> : <Pause className="w-3 h-3 fill-current text-amber-400" />}
-                        </button>
-
-                        <button
-                          id="btn-hud-hint"
-                          onClick={handleOpenHintModal}
-                          disabled={memoryBusy}
-                          className={`py-1 px-2.5 rounded-2xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] hover:from-[#ffe066] hover:to-[#fcae00] text-[#132257] border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.45)] hover:shadow-[0_8px_18px_rgba(234,179,8,0.45)] -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
-                            hintsCount > 0 ? "animate-pulse" : "opacity-90"
-                          }`}
-                          title={t.hintLabel}
-                        >
-                          <Lightbulb className="w-3.5 h-3.5 fill-[#132257] text-[#132257] drop-shadow-[0_1px_1px_rgba(255,255,255,0.4)]" />
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded text-center leading-none bg-[#132257] text-amber-300 shadow-sm">
-                            {hintsCount > 0 ? hintsCount : "+"}
-                          </span>
-                        </button>
-                      </>
-                    )}
-
-                    {/* Sound Toggle */}
-                    <button
-                      onClick={() => { synth.playSelect(); setSoundOn(!soundOn); }}
-                      className="p-1.5 rounded-lg bg-slate-950/80 border border-white/10 text-slate-200 cursor-pointer active:scale-95 transition-all"
-                    >
-                      {soundOn ? <Volume2 className="w-3 h-3 text-cyan-400" /> : <VolumeX className="w-3 h-3 text-rose-400" />}
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* UNIFIED HUD */}
+              <GameHUD
+                layoutConfig={layoutConfig}
+                synth={synth}
+                setIsMobileConfigOpen={setIsMobileConfigOpen}
+                setIsPaused={setIsPaused}
+                isPaused={isPaused}
+                activeTab={activeTab}
+                memoryMode={memoryMode}
+                vsBotTrophies={vsBotTrophies}
+                winsP1={winsP1}
+                winsP2={winsP2}
+                currentScore={currentScore}
+                level={level}
+                t={t}
+                memoryFinished={memoryFinished}
+                handleOpenHintModal={handleOpenHintModal}
+                hintsCount={hintsCount}
+                memoryBusy={memoryBusy}
+                soundOn={soundOn}
+                setSoundOn={setSoundOn}
+              />
 
 
 
@@ -4653,132 +4359,29 @@ export default function App() {
               )}
 
               {/* Hint Modal Popup for Classic Mode */}
-              {isHintModalOpen && memoryMode === "solo" && !memoryFinished && (
-                <div 
-                  id="memory-hint-modal-overlay" 
-                  className="absolute inset-0 bg-[#0a0d18]/85 backdrop-blur-md z-50 rounded-2xl sm:rounded-3xl flex items-center justify-center p-4 select-none animate-fade-in"
-                >
-                  <div className="bg-gradient-to-br from-[#1d2547]/95 via-[#151a36]/95 to-[#0e1226]/95 backdrop-blur-xl border-2 border-amber-500/40 rounded-2xl p-5 sm:p-6 shadow-[0_25px_60px_rgba(0,0,0,0.7),0_0_25px_rgba(245,158,11,0.2)] flex flex-col items-center gap-4 max-w-xs w-full relative animate-scale-up">
-                    {/* Close button */}
-                    <button
-                      id="btn-close-hint-modal"
-                      onClick={() => {
-                        synth.playSelect();
-                        setIsHintModalOpen(false);
-                      }}
-                      className="absolute top-3 right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 transition-colors cursor-pointer"
-                      title={t.settingsClose}
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-
-                    {/* Header / Emblem */}
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-b from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 shadow-[0_4px_16px_rgba(245,158,11,0.4)]">
-                        <Lightbulb className="w-6 h-6 fill-slate-950 text-slate-950" />
-                      </div>
-                      <h3 className="font-black text-slate-100 text-lg tracking-wide">
-                        {t.hintLabel}
-                      </h3>
-                      <div className="px-3 py-1 rounded-full bg-slate-900/90 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5 shadow-inner">
-                        <span className="text-slate-300">{t.availableText}</span>
-                        <span className="font-black text-amber-400 text-sm">{hintsCount}</span>
-                      </div>
-                    </div>
-
-                    {/* Options Buttons */}
-                    <div className="w-full flex flex-col gap-2.5 mt-1">
-                      {/* 1. Use Hint */}
-                      <button
-                        id="btn-modal-use-hint"
-                        onClick={() => {
-                          if (hintsCount > 0 && !memoryBusy) {
-                            setIsHintModalOpen(false);
-                            executeHint();
-                          }
-                        }}
-                        disabled={hintsCount <= 0 || memoryBusy}
-                        className={`w-full py-3 px-4 rounded-xl text-xs font-black transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${
-                          hintsCount > 0 && !memoryBusy
-                            ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-[#132257] border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] hover:from-[#ffe066] hover:to-[#fcae00] -translate-y-[1px] active:translate-y-0"
-                            : "bg-slate-800/80 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-60"
-                        }`}
-                      >
-                        <Zap className={`w-4 h-4 ${hintsCount > 0 ? "fill-[#132257] text-[#132257]" : "text-slate-500"}`} />
-                        <span>{t.useHintText(hintsCount)}</span>
-                      </button>
-
-                      {/* 2. Watch Ad to get +1 Hint */}
-                      <button
-                        id="btn-modal-watch-ad-hint"
-                        onClick={() => {
-                          synth.playSelect();
-                          handleRewardedAd(() => {
-                            updateHintsCount(prev => prev + 1);
-                          });
-                        }}
-                        className="w-full py-3 px-4 rounded-xl text-xs font-black transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 border-2 border-emerald-300/80 shadow-[0_4px_12px_rgba(16,185,129,0.3),inset_0_1.5px_1px_rgba(255,255,255,0.4)] -translate-y-[1px] active:translate-y-0"
-                      >
-                        <Video className="w-4 h-4 fill-slate-950 text-slate-950" />
-                        <span>{t.watchAdGetHint}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <HintModal
+                isHintModalOpen={isHintModalOpen}
+                setIsHintModalOpen={setIsHintModalOpen}
+                memoryMode={memoryMode}
+                memoryFinished={memoryFinished}
+                synth={synth}
+                t={t}
+                hintsCount={hintsCount}
+                memoryBusy={memoryBusy}
+                executeHint={executeHint}
+                handleRewardedAd={handleRewardedAd}
+                updateHintsCount={updateHintsCount}
+              />
 
               {/* Pause Overlay for Memory Mode */}
-              {isPaused && (
-                <div 
-                  id="memory-paused-overlay" 
-                  className="absolute inset-0 bg-[#0a0d18]/85 backdrop-blur-md z-50 rounded-2xl sm:rounded-3xl flex flex-col items-center justify-center p-4 sm:p-6 text-center select-none animate-fade-in"
-                >
-                  <div className="bg-gradient-to-br from-[#1d2547]/95 via-[#151a36]/95 to-[#0e1226]/95 backdrop-blur-xl border border-amber-500/30 rounded-2xl p-5 sm:p-6 shadow-[0_25px_60px_rgba(0,0,0,0.7),0_0_20px_rgba(245,158,11,0.15)] flex flex-col items-center gap-4 max-w-xs sm:max-w-sm w-full">
-                    {/* Glowing Pause Emblem */}
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20 animate-pulse">
-                      <Pause className="w-6 h-6 sm:w-7 sm:h-7 fill-amber-400/80" />
-                    </div>
-                    
-                    <div>
-                      <h3 className="font-black text-amber-100 text-base sm:text-xl tracking-wide uppercase">
-                        {t.gamePaused}
-                      </h3>
-                      <p className="text-slate-300/90 text-xs sm:text-sm mt-1 max-w-[260px] mx-auto leading-relaxed">
-                        {t.gamePausedDesc}
-                      </p>
-                    </div>
-
-                    <div className="w-full flex flex-col gap-2 pt-1">
-                      {/* Manual Resume Button */}
-                      <button
-                        id="btn-paused-resume"
-                        onClick={() => {
-                          synth.playResume();
-                          setIsPaused(false);
-                        }}
-                        className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 active:scale-95 text-slate-950 font-black text-xs sm:text-sm tracking-wider uppercase transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 shadow-[0_6px_20px_rgba(245,158,11,0.3)] hover:shadow-[0_10px_25px_rgba(245,158,11,0.4)]"
-                      >
-                        <Play className="w-4 h-4 fill-slate-950" />
-                        <span>{t.resumeBtn}</span>
-                      </button>
-
-                      {/* Restart Game Option */}
-                      <button
-                        id="btn-paused-restart"
-                        onClick={() => {
-                          synth.playSelect();
-                          generateMemoryGame(difficulty);
-                          setIsPaused(false);
-                        }}
-                        className="w-full py-2 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 active:scale-95 text-[11px] sm:text-xs font-extrabold tracking-wider uppercase transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>{t.newGameText}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <PauseOverlay
+                isPaused={isPaused}
+                setIsPaused={setIsPaused}
+                synth={synth}
+                t={t}
+                generateMemoryGame={generateMemoryGame}
+                difficulty={difficulty}
+              />
 
               {/* Abstract large rounded shapes with very low opacity (3-6%) */}
               <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
@@ -4818,14 +4421,16 @@ export default function App() {
 
               {/* Combo notification overlay */}
               {activeCombo && (
-                <div 
-                  key={activeCombo.id}
-                  className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none animate-combo flex flex-col items-center justify-center px-6 py-3.5 rounded-2xl border-2 shadow-[0_12px_36px_rgba(0,0,0,0.5)] ${activeCombo.glow}`}
-                >
-                  <span className="text-[10px] font-black tracking-widest uppercase opacity-85">{activeCombo.label}</span>
-                  <span className={`text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r ${activeCombo.text} bg-clip-text text-transparent font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]`}>
-                    Combo x{activeCombo.count}
-                  </span>
+                <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center p-4">
+                  <div 
+                    key={activeCombo.id}
+                    className={`animate-combo flex flex-col items-center justify-center px-6 py-3.5 rounded-2xl border-2 shadow-[0_12px_36px_rgba(0,0,0,0.5)] whitespace-nowrap select-none ${activeCombo.glow}`}
+                  >
+                    <span className="text-[10px] font-black tracking-widest uppercase opacity-85">{activeCombo.label}</span>
+                    <span className={`text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r ${activeCombo.text} bg-clip-text text-transparent font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]`}>
+                      Combo x{activeCombo.count}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -4849,728 +4454,64 @@ export default function App() {
               
               {/* DYNAMIC RESPONSIVE MEMORY BOARD AREA */}
               <div ref={memoryGridAreaRef} className="relative z-10 flex-1 min-h-0 w-full h-full flex flex-col items-center justify-center overflow-hidden py-1">
-                {(memoryMode === "twoPlayers" || memoryMode === "vsBot") && (
-                  <div className="relative z-10 w-full max-w-lg mx-auto mb-1 sm:mb-2 px-1 sm:px-2 flex flex-col gap-1 font-sans select-none animate-fade-in shrink-0">
-                    <style>{`
-                      @keyframes winning-glow-blue {
-                        0%, 100% { box-shadow: 0 0 12px rgba(59, 130, 246, 0.6), inset 0 0 10px rgba(59, 130, 246, 0.3); border-color: rgba(147, 197, 253, 0.8); }
-                        50% { box-shadow: 0 0 30px rgba(59, 130, 246, 1), inset 0 0 15px rgba(255, 255, 255, 0.8); border-color: rgba(255, 255, 255, 1); }
-                      }
-                      @keyframes winning-glow-red {
-                        0%, 100% { box-shadow: 0 0 12px rgba(244, 63, 94, 0.6), inset 0 0 10px rgba(244, 63, 94, 0.3); border-color: rgba(252, 165, 165, 0.8); }
-                        50% { box-shadow: 0 0 30px rgba(244, 63, 94, 1), inset 0 0 15px rgba(255, 255, 255, 0.8); border-color: rgba(255, 255, 255, 1); }
-                      }
-                      .animate-winning-blue {
-                        animation: winning-glow-blue 1.5s infinite ease-in-out;
-                      }
-                      .animate-winning-red {
-                        animation: winning-glow-red 1.5s infinite ease-in-out;
-                      }
-                    `}</style>
-
-                    {/* Player Score Cards */}
-                    {(() => {
-                      const targetPairsToWin = difficulty === "5x5" ? 7 : difficulty === "6x6" ? 10 : 8;
-                      return (
-                        <div className="flex items-center justify-between gap-1 sm:gap-3 md:gap-4 py-0.5 sm:py-1.5 md:py-2 landscape:py-0.5 landscape:gap-1.5 w-full min-w-0">
-                          {/* Player 1 Box (Blue Theme) */}
-                          <div className={`flex-1 min-w-0 p-1 sm:p-2 md:p-2.5 landscape:p-1 landscape:px-2 rounded-lg sm:rounded-xl border transition-all duration-300 flex flex-col gap-0.5 sm:gap-1 landscape:gap-0.5 shadow-md ${
-                            (memoryMode !== "vsBot" && p1Score >= targetPairsToWin)
-                              ? "bg-gradient-to-br from-blue-600 to-indigo-800 text-white border-blue-200 scale-[1.03] animate-winning-blue z-10 border-2 ring-2 ring-blue-500/30"
-                              : (memoryMode !== "vsBot" && p2Score >= targetPairsToWin)
-                                ? "bg-blue-950/90 text-blue-200/50 border-blue-900/20 scale-95 opacity-30 border z-0 filter grayscale-[40%]"
-                                : activePlayer === 1
-                                  ? "bg-gradient-to-br from-blue-600 to-indigo-800 text-white border-blue-300 scale-[1.02] shadow-[0_0_12px_rgba(59,130,246,0.6)] brightness-110 border-2 z-10"
-                                  : "bg-blue-950/90 text-blue-200/80 border-blue-900/40 scale-100 opacity-60 border z-0"
-                          }`}>
-                            <div className="flex flex-col landscape:flex-row items-center justify-center landscape:justify-between min-w-0 w-full landscape:gap-1">
-                              <div className="flex items-center gap-0.5 sm:gap-1.5 justify-center landscape:justify-start min-w-0">
-                                <div className={`w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 landscape:w-3 landscape:h-3 rounded-full flex items-center justify-center shrink-0 ${
-                                  activePlayer === 1 
-                                    ? "bg-white text-blue-600 animate-pulse" 
-                                    : "bg-blue-900 text-blue-200"
-                                }`}>
-                                  <span className="text-[6px] sm:text-[9px] landscape:text-[7px] font-black">1</span>
-                                </div>
-                                <span className="text-[8px] sm:text-[10px] md:text-[11px] landscape:text-[9px] font-black uppercase tracking-wider truncate">
-                                  {memoryMode === "vsBot" ? t.labelYou : t.labelP1}
-                                </span>
-                              </div>
-                              <div className="mt-0.5 sm:mt-0.5 landscape:mt-0 flex items-baseline gap-0.5 sm:gap-1 justify-center landscape:justify-end shrink-0">
-                                <span className="text-[7px] sm:text-[8px] uppercase font-black tracking-wider opacity-70 truncate hidden landscape:inline sm:inline">Score:</span>
-                                <span className="text-xs sm:text-lg md:text-2xl landscape:text-xs landscape:sm:text-sm font-black font-mono leading-none">{p1Score}</span>
-                              </div>
-                            </div>
-
-                            {/* Score Progress Bar */}
-                            <div className="flex gap-0.5 sm:gap-1 w-full transition-all duration-300 mt-0.5">
-                              {[...Array(targetPairsToWin)].map((_, i) => {
-                                const isFilled = p1Score > i;
-                                return (
-                                  <div key={i} className="flex-1 h-0.5 sm:h-1 landscape:h-0.5 rounded-full overflow-hidden bg-white/20 border border-white/5 relative">
-                                    <div 
-                                      className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-cyan-300 to-blue-400 shadow-[0_0_6px_rgba(103,232,249,0.8)]"
-                                      style={{
-                                        width: isFilled ? "100%" : "0%",
-                                      }}
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Active Turn Indicator in middle */}
-                          <div className="flex flex-col items-center justify-center shrink-0 px-0.5 sm:px-1">
-                            <div className={`px-1 py-0.5 sm:px-2 sm:py-0.5 rounded-full text-[6px] sm:text-[8px] md:text-[9px] landscape:text-[7px] font-black uppercase tracking-wider shadow-sm flex items-center gap-0.5 sm:gap-1 transition-colors ${
-                              activePlayer === 1 
-                                ? "bg-blue-100 text-blue-600 border border-blue-200" 
-                                : "bg-rose-100 text-rose-600 border border-rose-200"
-                            }`}>
-                              <span className={`w-0.5 sm:w-1 h-0.5 sm:h-1 rounded-full ${activePlayer === 1 ? "bg-blue-600" : "bg-rose-600"} animate-ping`}></span>
-                              <span className="truncate max-w-[38px] sm:max-w-none">
-                                {memoryMode === "vsBot" 
-                                  ? (activePlayer === 1 ? t.yourTurn : t.botTurnText(botUsername)) 
-                                  : (activePlayer === 1 ? t.p1Turn : t.p2Turn)}
-                              </span>
-                            </div>
-                            {consecutiveMatches > 0 && (
-                              <span className="text-[6px] sm:text-[7px] font-extrabold text-amber-600 mt-0.5 uppercase animate-pulse">
-                                Streak: {consecutiveMatches}/3
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Player 2 Box (Red Theme) */}
-                          <div className={`flex-1 min-w-0 p-1 sm:p-2 md:p-2.5 landscape:p-1 landscape:px-2 rounded-lg sm:rounded-xl border transition-all duration-300 flex flex-col gap-0.5 sm:gap-1 landscape:gap-0.5 shadow-md ${
-                            (memoryMode !== "vsBot" && p2Score >= targetPairsToWin)
-                              ? "bg-gradient-to-br from-rose-600 to-red-800 text-white border-rose-200 scale-[1.03] animate-winning-red z-10 border-2 ring-2 ring-rose-500/30"
-                              : (memoryMode !== "vsBot" && p1Score >= targetPairsToWin)
-                                ? "bg-rose-950/90 text-rose-200/50 border-rose-900/20 scale-95 opacity-30 border z-0 filter grayscale-[40%]"
-                                : activePlayer === 2
-                                  ? "bg-gradient-to-br from-rose-600 to-red-800 text-white border-rose-300 scale-[1.02] shadow-[0_0_12px_rgba(244,63,94,0.6)] brightness-110 border-2 z-10"
-                                  : "bg-rose-950/90 text-rose-200/80 border-rose-900/40 scale-100 opacity-60 border z-0"
-                          }`}>
-                            <div className="flex flex-col landscape:flex-row items-center justify-center landscape:justify-between min-w-0 w-full landscape:gap-1">
-                              <div className="flex items-center gap-0.5 sm:gap-1.5 justify-center landscape:justify-start min-w-0">
-                                <div className={`w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 landscape:w-3 landscape:h-3 rounded-full flex items-center justify-center shrink-0 ${
-                                  activePlayer === 2 
-                                    ? "bg-white text-rose-600 animate-pulse" 
-                                    : "bg-rose-900 text-rose-200"
-                                }`}>
-                                  <span className="text-[6px] sm:text-[9px] landscape:text-[7px] font-black">
-                                    {memoryMode === "vsBot" ? "🤖" : "2"}
-                                  </span>
-                                </div>
-                                <span className="text-[8px] sm:text-[10px] md:text-[11px] landscape:text-[9px] font-black uppercase tracking-wider truncate">
-                                  {memoryMode === "vsBot" ? `${botUsername} (Lv. ${currentBotDifficulty})` : "Player 2"}
-                                </span>
-                              </div>
-                              <div className="mt-0.5 sm:mt-0.5 landscape:mt-0 flex items-baseline gap-0.5 sm:gap-1 justify-center landscape:justify-end shrink-0">
-                                <span className="text-[7px] sm:text-[8px] uppercase font-black tracking-wider opacity-70 truncate hidden landscape:inline sm:inline">Score:</span>
-                                <span className="text-xs sm:text-lg md:text-2xl landscape:text-xs landscape:sm:text-sm font-black font-mono leading-none">{p2Score}</span>
-                              </div>
-                            </div>
-
-                            {/* Score Progress Bar */}
-                            <div className="flex gap-0.5 sm:gap-1 w-full transition-all duration-300 mt-0.5">
-                              {[...Array(targetPairsToWin)].map((_, i) => {
-                                const isFilled = p2Score > i;
-                                return (
-                                  <div key={i} className="flex-1 h-0.5 sm:h-1 landscape:h-0.5 rounded-full overflow-hidden bg-white/20 border border-white/5 relative">
-                                    <div 
-                                      className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-yellow-300 to-rose-400 shadow-[0_0_6px_rgba(253,224,71,0.8)]"
-                                      style={{
-                                        width: isFilled ? "100%" : "0%",
-                                      }}
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
+                <PlayerScoreHUD
+                  memoryMode={memoryMode}
+                  difficulty={difficulty}
+                  p1Score={p1Score}
+                  p2Score={p2Score}
+                  activePlayer={activePlayer}
+                  consecutiveMatches={consecutiveMatches}
+                  botUsername={botUsername}
+                  currentBotDifficulty={currentBotDifficulty}
+                  t={t}
+                />
                 
                 {/* Dynamically Centered Grid with Responsive Card Dimensions */}
                 <div ref={gridWrapperRef} className="flex-1 min-h-0 w-full h-full flex items-center justify-center overflow-hidden">
-                  <div 
-                    className={`poki-memory-grid relative z-10 transition-all duration-300 ease-out ${isDemoRunning ? "pointer-events-none select-none" : ""}`}
-                    style={{
-                      width: `${memoryCardSizing.gridWidth}px`,
-                      height: `${memoryCardSizing.gridHeight}px`,
-                      gap: `${memoryCardSizing.gap}px`,
-                      gridTemplateColumns: `repeat(${memoryCardSizing.cols}, minmax(0, 1fr))`,
-                      gridTemplateRows: `repeat(${memoryCardSizing.rows}, minmax(0, 1fr))`,
-                      '--card-size': `${memoryCardSizing.cardSize}px`,
-                    } as React.CSSProperties}
-                  >
-                    {memoryCards.map((emoji, index) => {
-                      if (memoryCardSizing.hideLockedCard && emoji === "BLOCKED") {
-                        return null;
-                      }
-
-                      const isMatched = memoryMatched.includes(index);
-                      const isFlipped = memoryFlipped.includes(index);
-                      const isMismatch = memoryFlipped.length === 3 && memoryFlipped.includes(index);
-                      const isMatchedByP1 = memoryMode === "solo" ? isMatched : matchedByP1.includes(index);
-
-                      return (
-                        <MemoryCard
-                          key={`mem-card-${matchSessionId}-${index}`}
-                          emoji={emoji}
-                          index={index}
-                          isRevealed={isFlipped}
-                          isMatched={isMatched}
-                          isMismatch={isMismatch}
-                          isMatchedByP1={isMatchedByP1}
-                          onClick={() => handleMemoryCardClick(index)}
-                          equippedCardBackId={equippedCardBackId}
-                        />
-                      );
-                    })}
-                  </div>
+                  <MemoryBoardGrid
+                    memoryCards={memoryCards}
+                    memoryCardSizing={memoryCardSizing}
+                    memoryMatched={memoryMatched}
+                    memoryFlipped={memoryFlipped}
+                    memoryBusy={memoryBusy}
+                    matchedByP1={matchedByP1}
+                    memoryMode={memoryMode}
+                    handleMemoryCardClick={handleMemoryCardClick}
+                    equippedCardBackId={equippedCardBackId}
+                    matchSessionId={matchSessionId}
+                    tutorialStep={tutorialStep}
+                    tutorialCardA={tutorialCardA}
+                    tutorialCardB={tutorialCardB}
+                  />
                 </div>
               </div>
 
               {/* THE PORTAL/OVERLAY FOR THE MEMORY GAME RESULT - CENTERED IN THE PLAY AREA */}
-              {memoryFinished && (() => {
-                const p1Winner = p1Score > p2Score;
-                const p2Winner = p2Score > p1Score;
-                const isDraw = p1Score === p2Score;
-
-                if (showVictoryCelebration) {
-                  const getCelebrationText = () => {
-                    switch (language) {
-                      case "vi":
-                        return "TUYỆT VỜI!";
-                      case "es":
-                        return "¡INCREÍBLE!";
-                      case "pt":
-                        return "INCRÍVEL!";
-                      default:
-                        return "AMAZING!";
-                    }
-                  };
-                  const celebrationText = getCelebrationText();
-
-                  return (
-                    <div 
-                      id="victory-celebration-panel" 
-                      className={`absolute inset-0 ${currentTheme.dialogBg} border-2 backdrop-blur-xl z-[100] rounded-3xl flex flex-col items-center justify-center p-6 text-center select-none overflow-hidden shadow-[0_16px_40px_rgba(10,14,35,0.4),inset_0_1.5px_1.5px_rgba(255,255,255,0.18)] transition-all duration-300 ${
-                        fadeCelebrationOut ? "animate-fade-out-celebration" : "animate-fade-in-backdrop"
-                      }`}
-                    >
-                      {/* Radial soft screen glow */}
-                      <div className="absolute inset-0 victory-screen-glow animate-pulse-glow pointer-events-none z-0" />
-
-                      {/* Colorful Emitter Fireworks around edges of the screen */}
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
-                        {[...Array(8)].map((_, i) => {
-                          const left = [10, 85, 15, 80, 20, 75, 45, 55][i];
-                          const top = [15, 20, 75, 80, 45, 50, 10, 85][i];
-                          const delay = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4][i] % 1.5;
-                          const color = ["#fbbf24", "#f43f5e", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#eab308"][i];
-                          return (
-                            <div
-                              key={`fw-prem-${i}`}
-                              className="absolute w-4 h-4 rounded-full flex items-center justify-center animate-firework-burst-premium"
-                              style={{
-                                left: `${left}%`,
-                                top: `${top}%`,
-                                animationDelay: `${delay}s`,
-                              }}
-                            >
-                              {[...Array(12)].map((_, pIdx) => {
-                                const angle = (pIdx * 30 * Math.PI) / 180;
-                                const distance = 40 + Math.random() * 45;
-                                const tx = Math.cos(angle) * distance;
-                                const ty = Math.sin(angle) * distance;
-                                return (
-                                  <div
-                                    key={`fwp-prem-${pIdx}`}
-                                    className="absolute w-1.5 h-1.5 rounded-full animate-firework-particle-premium"
-                                    style={{
-                                      backgroundColor: color,
-                                      animationDelay: `${delay}s`,
-                                      "--tw-x": `${tx}px`,
-                                      "--tw-y": `${ty}px`,
-                                    } as any}
-                                  />
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Confetti Particles */}
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
-                        {[...Array(24)].map((_, i) => {
-                          const left = (i * 4.2) + (Math.random() * 1.5);
-                          const delay = Math.random() * 1.8;
-                          const colors = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#a78bfa", "#f87171", "#22d3ee", "#fb7185"];
-                          const color = colors[i % colors.length];
-                          const sizeClass = i % 3 === 0 ? "w-2 h-3" : i % 3 === 1 ? "w-1.5 h-2.5" : "w-2.5 h-2.5";
-                          const rotation = Math.random() * 360;
-                          return (
-                            <div
-                              key={`confetti-${i}`}
-                              className={`absolute rounded-sm animate-confetti ${sizeClass}`}
-                              style={{
-                                left: `${left}%`,
-                                backgroundColor: color,
-                                animationDelay: `${delay}s`,
-                                transform: `rotate(${rotation}deg)`,
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-
-                      {/* Pop + Bounce + Float Center Text */}
-                      <div className="relative z-20 flex flex-col items-center justify-center animate-pop-bounce-float">
-                        <div className="text-6xl sm:text-8xl mb-4 animate-bounce filter drop-shadow-[0_4px_15px_rgba(234,179,8,0.6)]">
-                          🏆
-                        </div>
-                        
-                        {memoryMode === "twoPlayers" || memoryMode === "vsBot" ? (
-                          <>
-                            <h1 className="font-sans font-black text-4xl sm:text-6xl text-transparent bg-clip-text bg-gradient-to-b from-[#fff2a3] via-[#ffcf40] to-[#e69d00] drop-shadow-[0_0_25px_rgba(245,158,11,0.7)] tracking-wider">
-                              {isDraw 
-                                ? t.drawText
-                                : memoryMode === "vsBot"
-                                  ? (p1Winner ? t.youWinText : t.botWinsText)
-                                  : (p1Winner ? t.p1WinsText : t.p2WinsText)}
-                            </h1>
-                            
-                            <p className={`text-[11px] sm:text-xs font-black tracking-widest uppercase mt-4 animate-pulse transition-colors duration-300 ${currentTheme.accentText}`}>
-                              {isDraw ? t.closeMatchText : t.fantasticVictory}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <h1 className="font-sans font-black text-4xl sm:text-6xl text-transparent bg-clip-text bg-gradient-to-b from-[#fff2a3] via-[#ffcf40] to-[#e69d00] drop-shadow-[0_0_25px_rgba(245,158,11,0.7)] tracking-wider">
-                              {celebrationText}
-                            </h1>
-                            
-                            <p className={`text-[11px] sm:text-xs font-black tracking-widest uppercase mt-4 animate-pulse transition-colors duration-300 ${currentTheme.accentText}`}>
-                              {t.levelCompleted}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (!showScoreSummary) {
-                  // Fallback during animation transitions to prevent flash
-                  return null;
-                }
-
-                if (memoryMode === "twoPlayers" || memoryMode === "vsBot") {
-                  const p1Winner = p1Score > p2Score;
-                  const p2Winner = p2Score > p1Score;
-                  const isDraw = p1Score === p2Score;
-
-                  return (
-                    <div id="memory-finished-panel-2p" className={`absolute inset-0 ${currentTheme.dialogBg} border-2 backdrop-blur-xl z-40 rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-score-summary-fade-in shadow-[0_16px_40px_rgba(10,14,35,0.4),inset_0_1.5px_1.5px_rgba(255,255,255,0.18)] overflow-y-auto transition-all duration-300`}>
-                      {/* Embedded Style Tag for Fireworks animations */}
-                      <style>{`
-                        @keyframes firework-burst {
-                          0% { transform: scale(0.2); opacity: 0; }
-                          10% { opacity: 1; }
-                          80% { opacity: 0.9; }
-                          100% { transform: scale(1.5); opacity: 0; }
-                        }
-                        @keyframes firework-particle {
-                          0% { transform: translate(0, 0); opacity: 1; }
-                          100% { transform: translate(var(--tw-x), var(--tw-y)); opacity: 0; }
-                        }
-                      `}</style>
-
-                      {/* Colorful Fireworks celebration */}
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-                        {[...Array(6)].map((_, i) => {
-                          const left = [15, 80, 45, 25, 75, 50][i];
-                          const top = [20, 25, 15, 60, 55, 75][i];
-                          const delay = [0, 0.4, 0.8, 1.2, 1.6, 2.0][i];
-                          const color = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899"][i];
-                          return (
-                            <div 
-                              key={`fw-${i}`}
-                              className="absolute w-4 h-4 rounded-full flex items-center justify-center"
-                              style={{
-                                left: `${left}%`,
-                                top: `${top}%`,
-                                animation: `firework-burst 2.4s infinite`,
-                                animationDelay: `${delay}s`,
-                              }}
-                            >
-                              {[...Array(12)].map((_, pIdx) => {
-                                const angle = (pIdx * 30 * Math.PI) / 180;
-                                const distance = 40 + Math.random() * 50;
-                                const tx = Math.cos(angle) * distance;
-                                const ty = Math.sin(angle) * distance;
-                                return (
-                                  <div 
-                                    key={`fwp-${pIdx}`}
-                                    className="absolute w-1.5 h-1.5 rounded-full"
-                                    style={{
-                                      backgroundColor: color,
-                                      animation: `firework-particle 2.4s infinite`,
-                                      animationDelay: `${delay}s`,
-                                      "--tw-x": `${tx}px`,
-                                      "--tw-y": `${ty}px`,
-                                    } as any}
-                                  />
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="flex flex-col items-center gap-4 max-w-sm w-full relative z-10">
-                        {/* Trophy or Draw Icon */}
-                        <div className={`p-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${
-                          isDraw
-                            ? "bg-amber-500/20 border-2 border-amber-400/50 text-amber-300"
-                            : p1Winner
-                              ? "bg-blue-500/20 border-2 border-blue-400/50 text-blue-300"
-                              : "bg-rose-500/20 border-2 border-rose-400/50 text-rose-300"
-                        }`}>
-                          <Trophy className="w-10 h-10 animate-bounce" />
-                        </div>
-
-                        {/* Winner Announcement */}
-                        <div>
-                          {isDraw ? (
-                            <h3 className="font-extrabold text-amber-300 text-xl sm:text-2xl tracking-tight leading-tight uppercase animate-pulse">
-                              {t.drawTitleShort}
-                            </h3>
-                          ) : p1Winner ? (
-                            <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#bfe2ff] to-[#3b82f6] text-xl sm:text-2xl tracking-tight leading-tight uppercase drop-shadow-[0_2px_10px_rgba(59,130,246,0.5)]">
-                              {memoryMode === "vsBot" ? t.youWinShort : t.p1WinsShort}
-                            </h3>
-                          ) : (
-                            <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#ffccd3] to-[#f43f5e] text-xl sm:text-2xl tracking-tight leading-tight uppercase drop-shadow-[0_2px_10px_rgba(244,63,94,0.5)]">
-                              {memoryMode === "vsBot" ? t.botWinsShort : t.p2WinsShort}
-                            </h3>
-                          )}
-                          <p className={`text-xs ${currentTheme.textSecondary} mt-1 font-bold tracking-wider uppercase transition-colors duration-300`}>
-                            {isDraw ? t.bothPlayedBrilliantly : t.fantasticVictoryShort}
-                          </p>
-                        </div>
-
-                        {/* FINAL SCOREBOARD BREAKDOWN */}
-                        <div className={`w-full ${currentTheme.cardBg} border-2 ${currentTheme.cardBorder} rounded-2xl p-4 flex flex-col gap-3 shadow-[0_8px_20px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)] transition-all duration-300`}>
-                          <div className={`text-[10px] ${currentTheme.textSecondary} font-extrabold tracking-wider uppercase border-b ${currentTheme.cardBorder} pb-2 transition-colors duration-300`}>
-                            {t.finalScoresTitle}
-                          </div>
-                          <div className="flex items-center justify-around gap-4">
-                            {/* Player 1 final box */}
-                            <div className={`flex-1 p-2.5 rounded-xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${
-                              p1Winner 
-                                ? "bg-blue-500/25 border-blue-400/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.3)]" 
-                                : isDraw 
-                                  ? "bg-amber-500/10 border-amber-400/30 text-amber-200"
-                                  : `opacity-60 ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.textMuted}`
-                            }`}>
-                              <span className="text-[10px] font-black uppercase tracking-wide">
-                                {memoryMode === "vsBot" ? t.labelYou : t.labelP1}
-                              </span>
-                              <span className={`font-mono font-black text-xl mt-1 ${p1Winner ? "text-blue-200" : isDraw ? "text-amber-200" : currentTheme.textPrimary}`}>{p1Score}</span>
-                              {p1Winner && (
-                                <span className="text-[8px] font-black uppercase text-blue-400 mt-0.5 tracking-wider">
-                                  {t.labelWinner}
-                                </span>
-                              )}
-                              {isDraw && (
-                                <span className="text-[8px] font-black uppercase text-amber-400 mt-0.5 tracking-wider">
-                                  {t.labelDraw}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Player 2 final box */}
-                            <div className={`flex-1 p-2.5 rounded-xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${
-                              p2Winner 
-                                ? "bg-rose-500/25 border-rose-400/50 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.3)]" 
-                                : isDraw 
-                                  ? "bg-amber-500/10 border-amber-400/30 text-amber-200"
-                                  : `opacity-60 ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.textMuted}`
-                            }`}>
-                              <span className="text-[10px] font-black uppercase tracking-wide">
-                                {memoryMode === "vsBot" ? "BOT" : t.labelP2}
-                              </span>
-                              <span className={`font-mono font-black text-xl mt-1 ${p2Winner ? "text-rose-200" : isDraw ? "text-amber-200" : currentTheme.textPrimary}`}>{p2Score}</span>
-                              {p2Winner && (
-                                <span className="text-[8px] font-black uppercase text-rose-400 mt-0.5 tracking-wider">
-                                  {t.labelWinner}
-                                </span>
-                              )}
-                              {isDraw && (
-                                <span className="text-[8px] font-black uppercase text-amber-400 mt-0.5 tracking-wider">
-                                  {t.labelDraw}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {memoryMode === "vsBot" && (() => {
-                            const diffValue = p1Score - p2Score;
-                            const isWin = diffValue > 0;
-                            const isLoss = diffValue < 0;
-                            
-                            let trophyText = "";
-                            if (isWin) {
-                              const finalGain = challengeAdWatched ? diffValue * 2 : diffValue;
-                              trophyText = t.trophyEarned ? t.trophyEarned(finalGain) : `+${finalGain} Trophies`;
-                            } else if (isLoss) {
-                              const lossAmount = Math.abs(diffValue);
-                              const recoveryAmount = challengeAdWatched ? Math.max(1, Math.floor(lossAmount / 2)) : 0;
-                              const finalLoss = lossAmount - recoveryAmount;
-                              trophyText = challengeAdWatched 
-                                ? (t.trophyLossProtected ? t.trophyLossProtected(finalLoss) : `-${finalLoss} Trophies (50% Loss Protection)`)
-                                : t.trophyLost ? t.trophyLost(diffValue) : `-${lossAmount} Trophies`;
-                            } else {
-                              trophyText = challengeAdWatched ? (t.trophyBonusOne || "+1 Trophy (Bonus)") : t.trophyNone;
-                            }
-                            
-                            return (
-                              <div className={`p-3 rounded-xl flex flex-col items-center justify-center gap-1 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.2)] mt-1 transition-all duration-300 ${currentTheme.cardBg} border ${currentTheme.cardBorder}`}>
-                                <div className="flex items-center gap-2">
-                                  <Trophy className={`w-5 h-5 ${isWin ? "text-amber-400 animate-pulse" : isLoss ? "text-rose-400" : "text-slate-500"}`} />
-                                  <span className={`font-mono font-black text-lg transition-colors duration-300 ${
-                                    isWin 
-                                      ? (isThemeDark ? "text-emerald-300" : "text-emerald-700") 
-                                      : isLoss 
-                                        ? (isThemeDark ? "text-rose-300" : "text-rose-700") 
-                                        : `${currentTheme.textMuted}`
-                                  }`}>
-                                    {trophyText}
-                                  </span>
-                                </div>
-                                {challengeAdWatched && (
-                                  <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1 mt-0.5">
-                                    <Sparkles className="w-3 h-3 text-amber-300" />
-                                    {isWin ? (t.trophyRewardApplied2x || "×2 Trophy Reward Applied!") : isLoss ? (t.lossProtectionApplied50 || "50% Loss Protection Applied!") : (t.bonusTrophyGranted || "Bonus Trophy Granted!")}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                          <div className={`flex justify-between items-center text-xs ${currentTheme.textSecondary} font-bold px-1 pt-1.5 border-t ${currentTheme.cardBorder} transition-colors duration-300`}>
-                            <span>{t.totalMovesText}</span>
-                            <span className={`font-mono font-black text-sm transition-colors duration-300 ${currentTheme.accentText}`}>{memoryMoves}</span>
-                          </div>
-                        </div>
-
-                        {/* Play Again and Back to Menu Buttons */}
-                        {memoryMode === "vsBot" ? (
-                          <div className="flex flex-col items-center gap-2 w-full max-w-[280px]">
-                            {/* WATCH AD BUTTON FOR CHALLENGE MODE */}
-                            {!challengeAdWatched ? (
-                              <button
-                                id="btn-watch-ad-challenge"
-                                disabled={isWatchingAd}
-                                onClick={() => handleWatchAdChallenge(p1Score - p2Score)}
-                                className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs tracking-wide shadow-[0_4px_16px_rgba(245,158,11,0.45)] active:scale-95 transition-all flex items-center justify-between cursor-pointer border border-amber-200/60 relative overflow-hidden group"
-                              >
-                                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 pointer-events-none" />
-                                {isWatchingAd ? (
-                                  <div className="flex items-center justify-center gap-2 w-full py-0.5">
-                                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                                    <span className="font-extrabold text-xs text-slate-950">{t.loadingAdText || "Loading Ad..."}</span>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="flex items-center gap-2">
-                                      <div className="p-1.5 rounded-xl bg-slate-950/20 text-slate-950">
-                                        <Video className="w-4 h-4" />
-                                      </div>
-                                      <div className="flex flex-col items-start leading-tight text-left">
-                                        <span className="font-black text-xs text-slate-950">
-                                          {p1Score > p2Score
-                                            ? (t.watchAdDoubleTrophies ? t.watchAdDoubleTrophies(p1Score - p2Score) : `×2 Trophies (+${p1Score - p2Score})`)
-                                            : p1Score < p2Score
-                                              ? (t.watchAdSaveTrophies ? t.watchAdSaveTrophies(Math.max(1, Math.floor(Math.abs(p1Score - p2Score) / 2))) : `Save 50% Trophies (+${Math.max(1, Math.floor(Math.abs(p1Score - p2Score) / 2))})`)
-                                              : (t.watchAdBonusTrophy || "+1 Bonus Trophy")}
-                                        </span>
-                                        <span className="text-[9px] font-extrabold text-slate-900/80 uppercase tracking-wider">
-                                          {t.watchAdText || "Watch Ad"} • {t.adRewardBadge2x || "×2 Reward"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <Sparkles className="w-4 h-4 text-slate-950 animate-pulse shrink-0" />
-                                  </>
-                                )}
-                              </button>
-                            ) : (
-                              <div className="w-full px-4 py-2.5 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-xs flex items-center justify-center gap-2 shadow-inner">
-                                <Sparkles className="w-4 h-4 text-amber-300" />
-                                <span>{t.adRewardApplied || "Ad Reward Applied! 🎉"}</span>
-                              </div>
-                            )}
-
-                            <button
-                              id="btn-play-again-vsbot"
-                              onClick={() => { synth.playSelect(); generateMemoryGame(difficulty); }}
-                              className={`w-full px-6 py-3 rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
-                            >
-                              <span>{t.playAgainText}</span>
-                              <ArrowRight className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col sm:flex-row gap-2 w-full">
-                            <button
-                              id="btn-play-again-2p"
-                              onClick={() => { synth.playSelect(); generateMemoryGame(difficulty); }}
-                              className={`flex-1 px-4 py-3 rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
-                            >
-                              <span>{t.playAgainText}</span>
-                              <ArrowRight className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              id="btn-back-menu-2p"
-                              onClick={handleBackToMenu}
-                              className={`flex-1 px-4 py-3 rounded-2xl ${currentTheme.buttonSecondary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
-                            >
-                              <Home className="w-4 h-4" />
-                              <span>{t.backToMenuText}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-
-                // Solo mode Victory Screen
-                const baseScore = (memoryCards.length * 10) / 2;
-                const efficiencyScore = Math.max(0, 1000 - memoryMoves * 10) / 10;
-                const timeBonus = (memoryTimeLeft > 0 ? memoryTimeLeft * 20 : 0) / 5;
-                const totalLevelScore = Math.round(baseScore + efficiencyScore + timeBonus);
-
-                return (
-                  <div id="memory-finished-panel" className={`absolute inset-0 ${currentTheme.dialogBg} border-2 backdrop-blur-xl z-40 rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-score-summary-fade-in shadow-[0_16px_40px_rgba(10,14,35,0.4),inset_0_1.5px_1.5px_rgba(255,255,255,0.18)] overflow-y-auto transition-all duration-300`}>
-                    <div className="flex flex-col items-center gap-4 max-w-sm w-full">
-                      <div className="p-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.2)] bg-amber-500/20 border-2 border-amber-400/50 text-amber-300">
-                        <Trophy className="w-10 h-10 animate-bounce" />
-                      </div>
-
-                      <div>
-                        <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#fff2a3] via-[#ffcf40] to-[#e69d00] text-xl sm:text-2xl tracking-tight leading-tight drop-shadow-[0_2px_10px_rgba(230,157,0,0.4)]">
-                          {t.rewardDialogTitle || t.memoryWinTitle}
-                        </h3>
-                        <p className={`text-xs ${currentTheme.textSecondary} mt-1 font-bold leading-relaxed transition-colors duration-300`}>
-                          {t.memoryWinDesc(memoryMoves)}
-                        </p>
-                      </div>
-
-                      {/* SCOREBOARD BREAKDOWN */}
-                      <div className={`w-full ${currentTheme.cardBg} border-2 ${currentTheme.cardBorder} rounded-2xl p-4 text-left text-xs space-y-2.5 font-sans mt-1 shadow-[0_8px_20px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)] transition-all duration-300`}>
-                        <div className={`flex justify-between items-center ${currentTheme.textSecondary} pb-2 border-b ${currentTheme.cardBorder} transition-colors duration-300`}>
-                          <span className="font-black uppercase tracking-wider text-[10px]">{t.scoringBreakdown}</span>
-                          <span className="text-amber-400 font-extrabold text-[11px] font-mono tracking-wider">{t.boardSizeLabels[difficulty as keyof typeof t.boardSizeLabels] || difficulty}</span>
-                        </div>
-
-                        <div className="flex justify-between items-center font-bold">
-                          <span className={`transition-colors duration-300 ${currentTheme.textSecondary}`}>{t.baseMatchPoints}:</span>
-                          <span className={`font-mono ${currentTheme.textPrimary} font-black transition-colors duration-300`}>+{baseScore}</span>
-                        </div>
-
-                        <div className="flex justify-between items-center font-bold">
-                          <span className={`transition-colors duration-300 ${currentTheme.textSecondary}`}>
-                            {t.efficiencyBonus}:
-                          </span>
-                          <span className={`font-mono ${currentTheme.textPrimary} font-black transition-colors duration-300`}>+{efficiencyScore}</span>
-                        </div>
-
-                        <div className="flex justify-between items-center font-bold">
-                          <span className={`transition-colors duration-300 ${currentTheme.textSecondary}`}>
-                            {t.timeBonusText}:
-                          </span>
-                          <span className={`font-mono ${currentTheme.textPrimary} font-black transition-colors duration-300`}>+{timeBonus}</span>
-                        </div>
-
-                        <div className={`flex justify-between items-center pt-2.5 border-t ${currentTheme.cardBorder} font-black text-sm transition-colors duration-300 ${isThemeDark ? "text-emerald-300" : "text-emerald-700"}`}>
-                          <span>{t.levelScoreTotal}:</span>
-                          <div className="flex items-center gap-2">
-                            {classicAdWatched && (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] uppercase font-black tracking-wider animate-bounce border border-amber-400/40">
-                                {t.x2DoubledTag || "×2 Score! 🎉"}
-                              </span>
-                            )}
-                            <span className="font-mono text-lg">
-                              +{classicAdWatched ? totalLevelScore * 2 : totalLevelScore}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-center gap-2 w-full max-w-[280px] mt-1">
-                        {/* WATCH AD BUTTON FOR CLASSIC MODE */}
-                        {!classicAdWatched ? (
-                          <button
-                            id="btn-watch-ad-classic"
-                            disabled={isWatchingAd}
-                            onClick={() => handleWatchAdClassic(totalLevelScore)}
-                            className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs tracking-wide shadow-[0_4px_16px_rgba(245,158,11,0.45)] active:scale-95 transition-all flex items-center justify-between cursor-pointer border border-amber-200/60 relative overflow-hidden group"
-                          >
-                            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 pointer-events-none" />
-                            {isWatchingAd ? (
-                              <div className="flex items-center justify-center gap-2 w-full py-0.5">
-                                <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                                <span className="font-extrabold text-xs text-slate-950">{t.loadingAdText || "Loading Ad..."}</span>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="flex items-center gap-2">
-                                  <div className="p-1.5 rounded-xl bg-slate-950/20 text-slate-950">
-                                    <Video className="w-4 h-4" />
-                                  </div>
-                                  <div className="flex flex-col items-start leading-tight text-left">
-                                    <span className="font-black text-xs text-slate-950">
-                                      {t.watchAdDoubleScore || "×2 Final Score"}
-                                    </span>
-                                    <span className="text-[9px] font-extrabold text-slate-900/80 uppercase tracking-wider">
-                                      {t.watchAdText || "Watch Ad"} • {t.watchAdSubtextBonus ? t.watchAdSubtextBonus(totalLevelScore) : `+${totalLevelScore} Bonus`}
-                                    </span>
-                                  </div>
-                                </div>
-                                <Sparkles className="w-4 h-4 text-slate-950 animate-pulse shrink-0" />
-                              </>
-                            )}
-                          </button>
-                        ) : (
-                          <div className="w-full px-4 py-2.5 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-xs flex items-center justify-center gap-2 shadow-inner">
-                            <Sparkles className="w-4 h-4 text-amber-300" />
-                            <span>{t.adScoreRewardApplied || t.adRewardApplied || "×2 Score Reward Applied! 🎉"}</span>
-                          </div>
-                        )}
-
-                        <button
-                          id="btn-play-again-memory"
-                          onClick={() => { synth.playSelect(); generateMemoryGame(difficulty); }}
-                          className={`px-6 py-3 w-full rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
-                        >
-                          {t.newGame}
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
+              <MemoryFinishedModal
+                memoryFinished={memoryFinished}
+                p1Score={p1Score}
+                p2Score={p2Score}
+                showVictoryCelebration={showVictoryCelebration}
+                fadeCelebrationOut={fadeCelebrationOut}
+                showScoreSummary={showScoreSummary}
+                memoryMode={memoryMode}
+                language={language}
+                currentTheme={currentTheme}
+                t={t}
+                challengeAdWatched={challengeAdWatched}
+                classicAdWatched={classicAdWatched}
+                isWatchingAd={isWatchingAd}
+                memoryCards={memoryCards}
+                memoryMoves={memoryMoves}
+                memoryTimeLeft={memoryTimeLeft}
+                difficulty={difficulty}
+                isThemeDark={isThemeDark}
+                synth={synth}
+                handleWatchAdChallenge={handleWatchAdChallenge}
+                handleWatchAdClassic={handleWatchAdClassic}
+                generateMemoryGame={generateMemoryGame}
+                handleBackToMenu={handleBackToMenu}
+              />
 
               {/* PORTRAIT MOBILE BRANDING FOOTER */}
               {layoutConfig.showBrandingFooter && (
@@ -5589,157 +4530,25 @@ export default function App() {
                 </div>
               )}
             </div>
+          </GameViewportFrame>
           </div>
         )}
       </main>
 
       {/* SETTINGS MODAL / PANEL */}
-      <div 
-        id="settings-modal-backdrop"
-        className={`absolute inset-0 bg-[#0d101b]/70 md:backdrop-blur-md backdrop-blur-none z-[100] flex items-center justify-center p-4 transition-all duration-300 ${
-          isSettingsOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
-        onClick={() => setIsSettingsOpen(false)}
-      >
-        <div 
-          id="settings-modal-content"
-          className={`${currentTheme.dialogBg} md:backdrop-blur-xl backdrop-blur-none border-2 rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-[0_16px_40px_rgba(10,14,35,0.4),inset_0_1.5px_1.5px_rgba(255,255,255,0.18)] relative overflow-hidden text-slate-100 transition-all duration-300 transform max-h-[90vh] overflow-y-auto ${
-            isSettingsOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-            {/* Header glow */}
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-indigo-400 to-amber-400"></div>
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-cyan-400 animate-spin-slow" />
-                <h2 className="text-lg font-black tracking-tight">{t.settingsTitle}</h2>
-              </div>
-              <button
-                id="btn-close-settings-x"
-                onClick={() => { synth.playClose(); setIsSettingsOpen(false); }}
-                className="p-1.5 rounded-xl bg-[#34448e] hover:bg-[#3e51aa] text-slate-300 hover:text-white transition-all border border-[#546bbf]/40 shadow-sm cursor-pointer"
-                title={t.settingsClose}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="space-y-4">
-              
-              {/* Row 1: Language Settings */}
-              <div id="setting-row-language" className="p-4 rounded-2xl bg-[#1e2552]/70 border-2 border-[#3f509d]/40 flex flex-col gap-3 shadow-[0_4px_12px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xl">🌐</span>
-                    <div>
-                      <h3 className="text-sm font-black text-slate-100">{t.settingsLanguage}</h3>
-                      <p className="text-[10px] text-slate-300 font-bold">Select your language</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stylized Dropdown/Toggle Menu */}
-                <div className="relative w-full mt-1">
-                  {/* Dropdown Trigger */}
-                  <button
-                    id="btn-lang-dropdown-trigger"
-                    onClick={() => { synth.playSelect(); setIsLangDropdownOpen(!isLangDropdownOpen); }}
-                    className="w-full py-2 px-3.5 rounded-xl bg-[#2d3875] border-2 border-[#546bbf]/40 hover:border-[#546bbf]/60 text-slate-100 text-xs font-black flex items-center justify-between transition-all focus:outline-none cursor-pointer shadow-sm"
-                  >
-                    <span>
-                      {language === "en" ? "English" : language === "vi" ? "Tiếng Việt" : language === "es" ? "Español" : language === "pt" ? "Português" : language === "tr" ? "Türkçe" : language === "de" ? "Deutsch" : language === "fr" ? "Français" : language === "it" ? "Italiano" : language === "ru" ? "Русский" : language === "id" ? "Bahasa Indonesia" : language === "zh-TW" ? "繁體中文" : language === "ja" ? "日本語" : language === "ko" ? "한국어" : language === "pl" ? "Polski" : language === "nl" ? "Nederlands" : language === "th" ? "ไทย" : "English"}
-                    </span>
-                    <ChevronDown className={`w-4 h-4 text-slate-300 transition-transform duration-200 ${isLangDropdownOpen ? "rotate-180 text-cyan-300" : ""}`} />
-                  </button>
-
-                  {/* Dropdown Content with smooth height & opacity transition */}
-                  <div 
-                    className={`transition-all duration-300 ease-in-out overflow-hidden flex flex-col ${
-                       isLangDropdownOpen 
-                        ? "max-h-[320px] opacity-100 mt-1.5 pointer-events-auto" 
-                        : "max-h-0 opacity-0 pointer-events-none mt-0"
-                      }`}
-                  >
-                    <div className="bg-[#1e2552] border-2 border-[#3f509d]/60 rounded-xl p-1.5 grid grid-cols-2 gap-1 shadow-xl">
-                       {([
-                        { code: "de", label: "Deutsch" },
-                        { code: "en", label: "English" },
-                        { code: "es", label: "Español" },
-                        { code: "fr", label: "Français" },
-                        { code: "id", label: "Bahasa Indonesia" },
-                        { code: "it", label: "Italiano" },
-                        { code: "ja", label: "日本語" },
-                        { code: "ko", label: "한국어" },
-                        { code: "nl", label: "Nederlands" },
-                        { code: "pl", label: "Polski" },
-                        { code: "pt", label: "Português" },
-                        { code: "ru", label: "Русский" },
-                        { code: "th", label: "ไทย" },
-                        { code: "tr", label: "Türkçe" },
-                        { code: "vi", label: "Tiếng Việt" },
-                        { code: "zh-TW", label: "繁體中文" }
-                      ] as const).map((lang) => {
-                        const isSelected = language === lang.code;
-                        return (
-                          <button
-                            key={lang.code}
-                            id={`btn-lang-${lang.code}`}
-                            onClick={() => {
-                              synth.playSelect();
-                              changeLanguage(lang.code);
-                              setIsLangDropdownOpen(false);
-                            }}
-                            className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1 cursor-pointer ${
-                              isSelected
-                                ? "bg-gradient-to-r from-cyan-600/30 to-indigo-600/30 text-cyan-300 border border-cyan-500/30 shadow-inner"
-                                : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-slate-800/40 border border-transparent"
-                            }`}
-                          >
-                            <span className="truncate">{lang.label}</span>
-                            {isSelected && (
-                              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)] shrink-0" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2: Audio Config */}
-              <div id="setting-row-audio" className="p-4 rounded-2xl bg-[#1e2552]/70 border-2 border-[#3f509d]/40 flex items-center justify-between gap-4 shadow-[0_4px_12px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)]">
-                <div className="flex items-center gap-2.5">
-                  <div className={`p-2 rounded-xl ${soundOn ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/20" : "bg-rose-500/20 text-rose-300 border border-rose-500/20"}`}>
-                    {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-slate-100">{t.settingsAudio}</h3>
-                    <p className="text-[10px] text-slate-300 font-bold">{t.settingsAudioDesc}</p>
-                  </div>
-                </div>
-
-                {/* Stylized switch toggle */}
-                <button
-                  id="btn-settings-audio-toggle"
-                  onClick={() => { synth.playSelect(); setSoundOn(!soundOn); }}
-                  className={`w-12 h-6 rounded-full p-0.5 transition-all duration-200 focus:outline-none relative border border-slate-900/10 ${
-                    soundOn ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" : "bg-[#2d3875]"
-                  }`}
-                >
-                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
-                    soundOn ? "translate-x-6" : "translate-x-0"
-                  }`} />
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </div>
+      <SettingsModal
+        isSettingsOpen={isSettingsOpen}
+        setIsSettingsOpen={setIsSettingsOpen}
+        currentTheme={currentTheme}
+        t={t}
+        synth={synth}
+        language={language}
+        changeLanguage={changeLanguage}
+        isLangDropdownOpen={isLangDropdownOpen}
+        setIsLangDropdownOpen={setIsLangDropdownOpen}
+        soundOn={soundOn}
+        setSoundOn={setSoundOn}
+      />
 
       {/* SHOP MODAL / PANEL */}
       <ShopModal
@@ -5760,441 +4569,70 @@ export default function App() {
       />
 
       {/* GENTLE SNOW UNLOCK CONGRATULATION DIALOG */}
-      {showGentleSnowModal && (
-        <div 
-          id="gentle-snow-unlock-dialog"
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in"
-        >
-          <div 
-            id="gentle-snow-unlock-card"
-            className="bg-gradient-to-b from-[#1b224c] to-[#121633] border-2 border-amber-400/80 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-[0_0_50px_rgba(245,158,11,0.35)] text-center relative overflow-hidden flex flex-col items-center animate-scale-up"
-          >
-            {/* Top gradient border accent */}
-            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-cyan-400 via-amber-400 to-indigo-500" />
-            
-            {/* Floating Sparkles & Snow Icon badge */}
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-br from-sky-400/20 via-indigo-500/30 to-amber-400/20 border-2 border-amber-300/80 flex items-center justify-center text-4xl sm:text-5xl shadow-[0_8px_20px_rgba(6,182,212,0.3)] my-2 sm:my-3 animate-bounce-subtle">
-              ❄️
-            </div>
-
-            {/* Title */}
-            <h2 className="text-lg sm:text-xl font-black bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 bg-clip-text text-transparent uppercase tracking-wider mt-2 mb-2">
-              {t.gentleSnowUnlockTitle || "Special Reward Unlocked!"}
-            </h2>
-
-            {/* Description */}
-            <p className="text-xs sm:text-sm text-slate-200 font-semibold leading-relaxed mb-6 px-2">
-              {t.gentleSnowUnlockDesc || "Congratulations! You completed 3 Classic games and permanently unlocked Gentle Snow!"}
-            </p>
-
-            {/* Claim Now Button */}
-            <button
-              id="btn-claim-gentle-snow"
-              onClick={() => {
-                synth.playRankUp();
-                setShowGentleSnowModal(false);
-                setShopHighlightItemId("effect_snow");
-                setIsShopOpen(true);
-              }}
-              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] hover:from-[#ffe066] hover:to-[#fcae00] text-[#132257] border-2 border-amber-300/90 shadow-[0_6px_20px_rgba(234,179,8,0.4),inset_0_1.5px_1px_rgba(255,255,255,0.4)] hover:shadow-[0_10px_25px_rgba(234,179,8,0.5)] -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 text-sm sm:text-base font-black tracking-wide flex items-center justify-center gap-2 cursor-pointer transition-all duration-200"
-            >
-              <span>{t.claimNowButton || "Claim Now"}</span>
-              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-[#132257]" />
-            </button>
-          </div>
-        </div>
-      )}
+      <GentleSnowUnlockModal
+        showGentleSnowModal={showGentleSnowModal}
+        setShowGentleSnowModal={setShowGentleSnowModal}
+        t={t}
+        synth={synth}
+        setShopHighlightItemId={setShopHighlightItemId}
+        setIsShopOpen={setIsShopOpen}
+      />
 
       {/* READY TO START? GAME START CONFIRMATION MODAL */}
-      {showMemoryConfirm && (() => {
-        const getConfirmText = () => {
-          switch (language) {
-            case "vi":
-              return {
-                title: "Sẵn sàng bắt đầu?",
-                message: "Cấu hình trò chơi của bạn đã sẵn sàng. Nhấn Bắt đầu khi bạn đã sẵn sàng.",
-                start: "Bắt đầu",
-                cancel: "Hủy",
-              };
-            case "es":
-              return {
-                title: "¿Listo para comenzar?",
-                message: "Tus ajustes de juego están listos. Presiona Empezar cuando estés listo para comenzar.",
-                start: "Empezar",
-                cancel: "Cancelar",
-              };
-            case "pt":
-              return {
-                title: "Pronto para começar?",
-                message: "As suas configurações de jogo estão prontas. Pressione Começar quando estiver pronto.",
-                start: "Começar",
-                cancel: "Cancelar",
-              };
-            default:
-              return {
-                title: "Ready to Start?",
-                message: "Your game settings are ready. Press Start when you're ready to begin.",
-                start: "Start Game",
-                cancel: "Cancel",
-              };
-          }
-        };
-
-        const confirmText = getConfirmText();
-        return (
-          <div
-            id="memory-confirm-backdrop"
-            className="absolute inset-0 bg-[#0d101b]/70 md:backdrop-blur-md backdrop-blur-none z-[110] flex items-center justify-center p-4 animate-fade-in-backdrop"
-            onClick={() => setShowMemoryConfirm(false)}
-          >
-            <div
-              id="memory-confirm-content"
-              className="bg-[#252f67]/95 md:backdrop-blur-xl backdrop-blur-none border-2 border-[#546bbf]/60 rounded-3xl w-full max-w-sm p-6 shadow-[0_16px_40px_rgba(10,14,35,0.4),inset_0_1.5px_1.5px_rgba(255,255,255,0.18)] relative overflow-hidden text-slate-100 animate-scale-up-fade"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Top border indicator line */}
-              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-indigo-500 to-amber-400"></div>
-
-              {/* Title */}
-              <div className="flex flex-col items-center text-center mt-2 mb-4">
-                <div className="w-12 h-12 bg-indigo-500/20 text-indigo-300 rounded-2xl flex items-center justify-center mb-3 border-2 border-indigo-400/30 shadow-[0_4px_10px_rgba(0,0,0,0.1)]">
-                  <span className="text-2xl animate-bounce">🎮</span>
-                </div>
-                <h3 className="text-xl font-black tracking-tight text-white">{confirmText.title}</h3>
-              </div>
-
-              {/* Message */}
-              <p className="text-slate-200 text-sm leading-relaxed text-center mb-6 font-bold">
-                {confirmText.message}
-              </p>
-
-              {/* Selected Specs display as secondary helper details */}
-              <div className="bg-[#1e2552]/70 rounded-2xl p-3 mb-6 border-2 border-[#3f509d]/40 text-xs flex justify-around shadow-[0_4px_10px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.12)]">
-                <div className="flex flex-col items-center">
-                  <span className="text-slate-300 font-black uppercase text-[9px] mb-0.5 tracking-wider">Mode</span>
-                  <span className="text-cyan-300 font-black uppercase text-[10px] tracking-wide">
-                    {pendingMemoryMode === "solo" ? "Classic" : pendingMemoryMode === "vsBot" ? "Challenge" : "2 Players"}
-                  </span>
-                </div>
-                <div className="h-6 w-[2px] bg-[#3f509d]/40"></div>
-                <div className="flex flex-col items-center">
-                  <span className="text-slate-300 font-black uppercase text-[9px] mb-0.5 tracking-wider">Grid</span>
-                  <span className="text-amber-300 font-black uppercase text-[10px] tracking-wide">
-                    {pendingMemoryMode === "vsBot"
-                      ? t.boardSizeLabels[getBoardSizeForTrophies(vsBotTrophies)]
-                      : t.boardSizeLabels[pendingDifficulty as keyof typeof t.boardSizeLabels] || pendingDifficulty}
-                  </span>
-                </div>
-              </div>
-
-              {/* Buttons */}
-              {(() => {
-                const saved = localStorage.getItem("emoji_brainpop_saved_vs_bot_match");
-                let parsedSaved: any = null;
-                if (saved) {
-                  try {
-                    const parsed = JSON.parse(saved);
-                    if (parsed && parsed.memoryCards && parsed.memoryCards.length > 0 && !parsed.memoryFinished) {
-                      parsedSaved = parsed;
-                    }
-                  } catch (e) {}
-                }
-
-                if (pendingMemoryMode === "vsBot" && parsedSaved) {
-                  return (
-                    <div className="flex flex-col gap-2 w-full">
-                      <div className="flex gap-2">
-                        <button
-                          id="btn-confirm-resume"
-                          onClick={() => {
-                            synth.playSelect();
-                            restoreSavedVsBotMatch(parsedSaved);
-                            setMemoryMode("vsBot");
-                            setShowMemoryConfirm(false);
-                          }}
-                          className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-b from-cyan-400 to-indigo-500 text-white font-black text-xs tracking-wider transition-all duration-200 shadow-md border-2 border-cyan-300/50 active:scale-95 cursor-pointer text-center hover:brightness-105"
-                        >
-                          {t.resumeGameText}
-                        </button>
-                        <button
-                          id="btn-confirm-new"
-                          onClick={() => {
-                            synth.playSelect();
-                            localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
-                            const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
-                            setDifficulty(finalDiff);
-                            setMemoryMode("vsBot");
-                            generateMemoryGame(finalDiff);
-                            setShowMemoryConfirm(false);
-                          }}
-                          className="flex-1 py-3 px-4 rounded-2xl bg-[#34448e] hover:bg-[#3e51aa] text-slate-100 font-black text-xs tracking-wider transition-all duration-200 border-2 border-[#546bbf]/40 active:scale-95 cursor-pointer text-center"
-                        >
-                          {t.newGameText}
-                        </button>
-                      </div>
-                      <button
-                        id="btn-confirm-cancel"
-                        onClick={() => {
-                          synth.playSelect();
-                          setShowMemoryConfirm(false);
-                        }}
-                        className="py-2.5 px-4 rounded-xl bg-transparent hover:bg-slate-800/40 text-slate-400 hover:text-slate-300 font-extrabold text-xs tracking-wider transition-all duration-200 active:scale-95 cursor-pointer text-center"
-                      >
-                        {confirmText.cancel}
-                      </button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="flex gap-3 w-full">
-                    <button
-                      id="btn-confirm-cancel"
-                      onClick={() => {
-                        synth.playSelect();
-                        setShowMemoryConfirm(false);
-                      }}
-                      className="flex-1 py-3 px-4 rounded-2xl bg-[#34448e] hover:bg-[#3e51aa] text-slate-100 font-black text-xs tracking-wider transition-all duration-200 border-2 border-[#546bbf]/40 active:scale-95 cursor-pointer"
-                    >
-                      {confirmText.cancel}
-                    </button>
-                    <button
-                      id="btn-confirm-start"
-                      onClick={() => {
-                        synth.playSelect();
-                        const finalDiff = pendingMemoryMode === "vsBot" 
-                          ? getBoardSizeForTrophies(vsBotTrophies) 
-                          : pendingDifficulty;
-                        setDifficulty(finalDiff);
-                        setMemoryMode(pendingMemoryMode);
-                        generateMemoryGame(finalDiff);
-                        setShowMemoryConfirm(false);
-                      }}
-                      className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 font-black text-xs tracking-wider transition-all duration-200 shadow-md border-2 border-amber-300/80 active:scale-95 cursor-pointer hover:brightness-105"
-                    >
-                      {confirmText.start}
-                    </button>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        );
-      })()}
+      <GameStartConfirmModal
+        showMemoryConfirm={showMemoryConfirm}
+        setShowMemoryConfirm={setShowMemoryConfirm}
+        language={language}
+        pendingMemoryMode={pendingMemoryMode}
+        pendingDifficulty={pendingDifficulty}
+        vsBotTrophies={vsBotTrophies}
+        t={t}
+        synth={synth}
+        restoreSavedVsBotMatch={restoreSavedVsBotMatch}
+        setMemoryMode={setMemoryMode}
+        setDifficulty={setDifficulty}
+        generateMemoryGame={generateMemoryGame}
+        getBoardSizeForTrophies={getBoardSizeForTrophies}
+        isBoardSizeUnlocked={isBoardSizeUnlocked}
+        handleUnlockBoardSize={handleUnlockBoardSize}
+      />
 
       {/* RANK UP POPUP CELEBRATION */}
-      {showRankUpPopup && rankUpBadge && (
-        <div 
-          id="rank-up-backdrop"
-          className="absolute inset-0 bg-[#0d101b]/70 backdrop-blur-md z-[120] flex items-center justify-center p-4 animate-fade-in-backdrop"
-        >
-          {/* Subtle sparkles/particles background */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-            {[...Array(12)].map((_, i) => {
-              const left = Math.random() * 80 + 10;
-              const top = Math.random() * 80 + 10;
-              const size = Math.random() * 12 + 6;
-              const delay = Math.random() * 0.5;
-              return (
-                <Sparkles
-                  key={`sparkle-${i}`}
-                  className="absolute text-amber-400 animate-pulse"
-                  style={{
-                    left: `${left}%`,
-                    top: `${top}%`,
-                    width: `${size}px`,
-                    height: `${size}px`,
-                    animationDelay: `${delay}s`,
-                    animationDuration: "1.5s",
-                  }}
-                />
-              );
-            })}
-          </div>
-
-          <div 
-            id="rank-up-content"
-            className={`${currentTheme.dialogBg} backdrop-blur-xl border-2 border-amber-400/80 rounded-3xl p-6 max-w-xs w-full shadow-[0_16px_40px_rgba(245,158,11,0.25),inset_0_1.5px_1.5px_rgba(255,255,255,0.18)] relative z-10 flex flex-col items-center gap-4 animate-scale-up text-center animate-fade-in-backdrop transition-all duration-300`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col items-center gap-1.5">
-              <Sparkles className="w-6 h-6 text-amber-400 animate-spin-slow" />
-              <h3 className="font-black text-xl sm:text-2xl text-amber-400 tracking-wider uppercase leading-none drop-shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
-                {isRankPromotion ? t.rankUpTitle : t.rankDownTitle}
-              </h3>
-              <p className={`text-[10px] ${currentTheme.textSecondary} font-bold uppercase tracking-widest transition-colors duration-300`}>
-                {isRankPromotion ? t.newRankAchieved : t.currentRankLabel}
-              </p>
-            </div>
-
-            {/* Large scale badge icon */}
-            <div className={`p-4 rounded-full border-2 ${rankUpBadge.bg} ${rankUpBadge.border} ${rankUpBadge.shadow} shadow-lg flex items-center justify-center animate-badge-scale-up`}>
-              {rankUpBadge.badgeType === "shield" ? (
-                <Shield 
-                  className={`w-14 h-14 ${rankUpBadge.color}`} 
-                  fill={rankUpBadge.fill} 
-                  strokeWidth={1.5}
-                />
-              ) : (
-                <Crown 
-                  className={`w-14 h-14 ${rankUpBadge.color}`} 
-                  fill={rankUpBadge.fill} 
-                  strokeWidth={1.5}
-                />
-              )}
-            </div>
-
-            <div className="flex flex-col items-center">
-              <span className={`font-black text-lg tracking-wide uppercase ${rankUpBadge.color}`}>
-                {t[rankUpBadge.nameKey]}
-              </span>
-              <span className={`text-[11px] ${currentTheme.textSecondary} mt-1 font-bold transition-colors duration-300`}>
-                {isRankPromotion ? t.congratsTrophies(vsBotTrophies) : t.currentTrophiesText(vsBotTrophies)}
-              </span>
-            </div>
-
-            <button
-              onClick={() => {
-                synth.playSelect();
-                setShowRankUpPopup(false);
-              }}
-              className={`w-full py-3 px-4 rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer`}
-            >
-              {isRankPromotion ? t.awesomeText : t.okText}
-            </button>
-          </div>
-        </div>
-      )}
+      <RankUpModal
+        showRankUpPopup={showRankUpPopup}
+        setShowRankUpPopup={setShowRankUpPopup}
+        rankUpBadge={rankUpBadge}
+        isRankPromotion={isRankPromotion}
+        vsBotTrophies={vsBotTrophies}
+        t={t}
+        currentTheme={currentTheme}
+        synth={synth}
+      />
 
       {/* HIGH SCORE POPUP CELEBRATION */}
-      {showHighScorePopup && (
-        <div 
-          id="highscore-popup-backdrop"
-          className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-fade-in-backdrop animate-duration-200"
-          onClick={() => setShowHighScorePopup(false)}
-        >
-          {/* Subtle sparkles/particles background */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-            {[...Array(8)].map((_, i) => {
-              const left = Math.random() * 80 + 10;
-              const top = Math.random() * 80 + 10;
-              const size = Math.random() * 10 + 6;
-              const delay = Math.random() * 0.5;
-              return (
-                <Sparkles
-                  key={`hs-sparkle-${i}`}
-                  className="absolute text-amber-400 animate-pulse"
-                  style={{
-                    left: `${left}%`,
-                    top: `${top}%`,
-                    width: `${size}px`,
-                    height: `${size}px`,
-                    animationDelay: `${delay}s`,
-                    animationDuration: "1.5s",
-                  }}
-                />
-              );
-            })}
-          </div>
-
-          <div 
-            id="highscore-popup-content"
-            className="bg-[#252f67]/95 backdrop-blur-xl border-2 border-emerald-400/80 rounded-3xl p-6 max-w-xs w-full shadow-[0_16px_40px_rgba(16,185,129,0.25),inset_0_1.5px_1.5px_rgba(255,255,255,0.18)] relative z-10 flex flex-col items-center gap-4 text-center animate-scale-up animate-duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col items-center gap-2">
-              <div className="p-3 bg-emerald-500/20 border-2 border-emerald-400/40 rounded-full text-emerald-300 animate-bounce">
-                <Trophy className="w-8 h-8" />
-              </div>
-              <h3 className="font-black text-xl sm:text-2xl text-emerald-300 tracking-wider uppercase leading-none mt-2">
-                {t.newHighScoreTitle}
-              </h3>
-            </div>
-
-            <div className="bg-[#1e2552]/70 border-2 border-emerald-500/40 rounded-2xl py-3.5 px-6 w-full shadow-[0_4px_10px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col items-center">
-              <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest mb-1">
-                {t.recordScoreLabel}
-              </span>
-              <span className="font-mono text-3xl font-black text-emerald-300 drop-shadow-[0_2px_8px_rgba(52,211,153,0.3)]">
-                {newHighScoreValue}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-200 font-bold px-2 leading-relaxed">
-              {t.congratsHighScore}
-            </p>
-
-            <button
-              id="btn-highscore-ok"
-              onClick={() => {
-                synth.playConfirm();
-                setShowHighScorePopup(false);
-              }}
-              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-b from-emerald-400 to-[#10b981] text-slate-950 text-xs font-black uppercase tracking-wider shadow-md border-2 border-emerald-300/80 hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-            >
-              {t.okText}
-            </button>
-          </div>
-        </div>
-      )}
+      <HighScoreModal
+        showHighScorePopup={showHighScorePopup}
+        setShowHighScorePopup={setShowHighScorePopup}
+        newHighScoreValue={newHighScoreValue}
+        t={t}
+        synth={synth}
+      />
 
       {/* 2 PLAYERS MATCH RECORD RESET CONFIRMATION */}
-      {showResetConfirm && (
-        <div 
-          id="reset-confirm-backdrop"
-          className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-fade-in-backdrop animate-duration-200"
-          onClick={() => setShowResetConfirm(false)}
-        >
-          <div 
-            id="reset-confirm-content"
-            className="bg-slate-900/95 border-2 border-rose-500/30 rounded-3xl p-6 max-w-xs w-full shadow-2xl relative z-10 flex flex-col items-center gap-4 text-center animate-scale-up animate-duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Warning indicator */}
-            <div className="w-12 h-12 bg-rose-500/10 text-rose-400 rounded-full flex items-center justify-center border border-rose-500/20">
-              <RotateCcw className="w-6 h-6 animate-spin-reverse" />
-            </div>
+      <ResetConfirmModal
+        showResetConfirm={showResetConfirm}
+        setShowResetConfirm={setShowResetConfirm}
+        synth={synth}
+        t={t}
+        setWinsP1={setWinsP1}
+        setWinsP2={setWinsP2}
+      />
 
-            {/* Title */}
-            <h3 className="font-black text-lg text-white uppercase tracking-wider leading-tight">
-              {t.resetMatchRecordTitle}
-            </h3>
-
-            {/* Message */}
-            <p className="text-xs text-slate-350 leading-relaxed px-1">
-              {t.resetMatchRecordConfirm}
-            </p>
-
-            {/* Buttons */}
-            <div className="flex gap-2.5 w-full mt-2">
-              <button
-                id="btn-reset-cancel"
-                onClick={() => {
-                  synth.playSelect();
-                  setShowResetConfirm(false);
-                }}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-extrabold text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer"
-              >
-                {t.cancelText}
-              </button>
-              <button
-                id="btn-reset-confirm"
-                onClick={() => {
-                  synth.playSelect();
-                  setWinsP1(0);
-                  setWinsP2(0);
-                  localStorage.removeItem("emoji_brainpop_2p_wins_p1");
-                  localStorage.removeItem("emoji_brainpop_2p_wins_p2");
-                  setShowResetConfirm(false);
-                }}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md"
-              >
-                {t.resetButtonText}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* LOADING REWARDED AD DIALOG OVERLAY */}
+      <LoadingAdOverlay
+        isWatchingAd={isWatchingAd}
+        t={t}
+      />
     </div>
     </div>
   );

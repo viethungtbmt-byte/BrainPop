@@ -4,15 +4,17 @@ import { MockProvider } from "./providers/MockProvider";
 
 export class AdManager {
   private static instance: AdManager;
-  private provider: AdProvider;
+  private customProvider: AdProvider | null = null;
 
-  private constructor() {
+  private get provider(): AdProvider {
+    if (this.customProvider) {
+      return this.customProvider;
+    }
     const poki = new PokiProvider();
     if (poki.isAvailable()) {
-      this.provider = poki;
-    } else {
-      this.provider = new MockProvider();
+      return poki;
     }
+    return new MockProvider();
   }
 
   public static getInstance(): AdManager {
@@ -26,7 +28,7 @@ export class AdManager {
    * Set or switch to a custom provider at runtime
    */
   public setProvider(provider: AdProvider): void {
-    this.provider = provider;
+    this.customProvider = provider;
   }
 
   public getActivePlatform(): AdPlatform {

@@ -12,6 +12,7 @@ interface MemoryCardProps {
   onClick: () => void;
   equippedCardBackId?: string;
   language?: string;
+  isTutorialTarget?: boolean;
 }
 
 // Deterministically map each unique emoji to a standard suit (Hearts ♥, Diamonds ♦, Spades ♠, Clubs ♣)
@@ -187,6 +188,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
   onClick,
   equippedCardBackId = "cardback_circle",
   language = "en",
+  isTutorialTarget = false,
 }) => {
   const displayEmoji = emoji === "BLOCKED" ? "🗝️" : emoji;
   const suitInfo = getSuitInfo(displayEmoji);
@@ -286,6 +288,22 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
       }`}
       id={`memory-card-container-${index}`}
     >
+      {/* Tutorial Highlight Ring & Floating Pointer */}
+      {isTutorialTarget && !isMatched && (
+        <div className="absolute -inset-1 rounded-2xl ring-4 ring-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.9)] z-30 pointer-events-none animate-pulse scale-[1.02]" />
+      )}
+
+      {isTutorialTarget && !isMatched && (
+        <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center animate-bounce">
+          <div className="bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 text-[10px] sm:text-xs font-black uppercase px-2 py-0.5 rounded-full shadow-[0_4px_12px_rgba(245,158,11,0.5)] border border-amber-200 mb-0.5 tracking-wider animate-pulse">
+            TAP!
+          </div>
+          <span className="text-3xl sm:text-4xl filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)]">
+            👆
+          </span>
+        </div>
+      )}
+
       {/* 3D Inner Card Wrapper */}
       <div
         className={`relative w-full h-full duration-500 transition-transform [transform-style:preserve-3d] ${
