@@ -5,16 +5,21 @@ import { MockProvider } from "./providers/MockProvider";
 export class AdManager {
   private static instance: AdManager;
   private customProvider: AdProvider | null = null;
+  private defaultProvider: AdProvider | null = null;
 
   private get provider(): AdProvider {
     if (this.customProvider) {
       return this.customProvider;
     }
-    const poki = new PokiProvider();
-    if (poki.isAvailable()) {
-      return poki;
+    if (!this.defaultProvider) {
+      const poki = new PokiProvider();
+      if (poki.isAvailable()) {
+        this.defaultProvider = poki;
+      } else {
+        this.defaultProvider = new MockProvider();
+      }
     }
-    return new MockProvider();
+    return this.defaultProvider;
   }
 
   public static getInstance(): AdManager {
@@ -22,6 +27,13 @@ export class AdManager {
       AdManager.instance = new AdManager();
     }
     return AdManager.instance;
+  }
+
+  public init(): Promise<void> {
+    if (this.provider.init) {
+      return this.provider.init();
+    }
+    return Promise.resolve();
   }
 
   /**
@@ -60,3 +72,4 @@ export class AdManager {
 }
 
 export const adManager = AdManager.getInstance();
+

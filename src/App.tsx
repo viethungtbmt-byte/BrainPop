@@ -1144,6 +1144,106 @@ export default function App() {
     }
   }, [pendingMemoryMode, t]);
 
+  // Poki safeguard: Prevent page scrolling/jumping from Space and Arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't block keys if focused inside an editable text input or textarea
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (
+        [
+          "ArrowUp",
+          "ArrowDown",
+          "ArrowLeft",
+          "ArrowRight",
+          " ",
+          "Spacebar",
+        ].includes(e.key)
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      // Allow scrolling inside modal or scrollable content containers
+      let target = e.target as HTMLElement | null;
+      let isScrollable = false;
+      while (target && target !== document.body && target !== document.documentElement) {
+        const overflowY = window.getComputedStyle(target).overflowY;
+        if (
+          (overflowY === "auto" || overflowY === "scroll") &&
+          target.scrollHeight > target.clientHeight
+        ) {
+          isScrollable = true;
+          break;
+        }
+        target = target.parentElement;
+      }
+      if (!isScrollable) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { passive: false });
+    window.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
+  // Poki SDK: Sync gameplayStart / gameplayStop with active game lifecycle
+  useEffect(() => {
+    if (isLoading) return;
+
+    // Active gameplay condition:
+    // Game is underway (not finished), and no blocking modal/pause/menu is open
+    const isGameplayActive =
+      !memoryFinished &&
+      !isPaused &&
+      !isSettingsOpen &&
+      !isShopOpen &&
+      !isMobileConfigOpen &&
+      !showResetConfirm &&
+      !isHintModalOpen &&
+      !showScoreSummary &&
+      !showVictoryCelebration &&
+      !showHighScorePopup &&
+      !showRankUpPopup &&
+      !showGentleSnowModal &&
+      !isWatchingAd;
+
+    if (isGameplayActive) {
+      adManager.gameplayStart();
+    } else {
+      adManager.gameplayStop();
+    }
+  }, [
+    isLoading,
+    memoryFinished,
+    isPaused,
+    isSettingsOpen,
+    isShopOpen,
+    isMobileConfigOpen,
+    showResetConfirm,
+    isHintModalOpen,
+    showScoreSummary,
+    showVictoryCelebration,
+    showHighScorePopup,
+    showRankUpPopup,
+    showGentleSnowModal,
+    isWatchingAd,
+  ]);
+
   // --- HELPERS ---
   const shuffleArray = <T,>(arr: T[]): T[] => {
     const res = [...arr];
@@ -1294,6 +1394,10 @@ export default function App() {
     const { randomizedBoard, selectedEmojis } = generateMemoryBoard(actualDiff, effectiveMode as any);
 
     lastGeneratedConfigRef.current = { diff: actualDiff, mode: effectiveMode };
+
+    if (memoryFinished) {
+      adManager.showCommercialAd().catch(() => {});
+    }
 
     setMemoryCards(randomizedBoard);
     setMemoryMatched([]);
@@ -1734,32 +1838,16 @@ export default function App() {
     setIsWatchingAd(true);
     synth.playSelect();
 
-    let handled = false;
-    const cleanupAndSuccess = () => {
-      if (handled) return;
-      handled = true;
-      setIsWatchingAd(false);
-      onSuccess();
-    };
-
-    // Safety timeout: if ad SDK hangs or blocks on mobile, resolve after 35s
-    const adTimeout = setTimeout(() => {
-      cleanupAndSuccess();
-    }, 35000);
-
     adManager.showRewardedAd()
       .then((withReward: boolean) => {
-        clearTimeout(adTimeout);
+        setIsWatchingAd(false);
         if (withReward) {
-          cleanupAndSuccess();
-        } else {
-          setIsWatchingAd(false);
+          onSuccess();
         }
       })
       .catch((err: any) => {
-        clearTimeout(adTimeout);
+        setIsWatchingAd(false);
         console.warn("Rewarded ad error:", err);
-        cleanupAndSuccess();
       });
   };
 

@@ -4,6 +4,8 @@ import { synth } from "../../audio";
 export class PokiProvider implements AdProvider {
   readonly name: AdPlatform = "poki";
   private initPromise: Promise<void> | null = null;
+  private _isPlaying: boolean = false;
+  private _loadingFinishedCalled: boolean = false;
 
   private get sdk(): any {
     return (window as any).PokiSDK;
@@ -11,6 +13,10 @@ export class PokiProvider implements AdProvider {
 
   isAvailable(): boolean {
     return typeof (window as any).PokiSDK !== "undefined";
+  }
+
+  public isPlaying(): boolean {
+    return this._isPlaying;
   }
 
   public init(): Promise<void> {
@@ -32,18 +38,25 @@ export class PokiProvider implements AdProvider {
   }
 
   gameLoadingFinished(): void {
-    this.init();
-    const sdk = this.sdk;
-    if (sdk && typeof sdk.gameLoadingFinished === "function") {
-      try {
-        sdk.gameLoadingFinished();
-      } catch (err) {
-        console.warn("[PokiProvider] gameLoadingFinished error:", err);
+    if (this._loadingFinishedCalled) return;
+    this._loadingFinishedCalled = true;
+
+    // Ensure SDK init has settled before or alongside gameLoadingFinished
+    this.init().then(() => {
+      const sdk = this.sdk;
+      if (sdk && typeof sdk.gameLoadingFinished === "function") {
+        try {
+          sdk.gameLoadingFinished();
+        } catch (err) {
+          console.warn("[PokiProvider] gameLoadingFinished error:", err);
+        }
       }
-    }
+    });
   }
 
   gameplayStart(): void {
+    if (this._isPlaying) return; // Prevent duplicate consecutive calls
+    this._isPlaying = true;
     const sdk = this.sdk;
     if (sdk && typeof sdk.gameplayStart === "function") {
       try {
@@ -55,6 +68,8 @@ export class PokiProvider implements AdProvider {
   }
 
   gameplayStop(): void {
+    if (!this._isPlaying) return; // Prevent duplicate consecutive calls
+    this._isPlaying = false;
     const sdk = this.sdk;
     if (sdk && typeof sdk.gameplayStop === "function") {
       try {
@@ -68,6 +83,10 @@ export class PokiProvider implements AdProvider {
   async showRewardedAd(): Promise<boolean> {
     await this.init();
     const sdk = this.sdk;
+    const wasPlaying = this._isPlaying;
+    if (wasPlaying) {
+      this.gameplayStop();
+    }
     synth.muteForAd();
 
     try {
@@ -75,20 +94,25 @@ export class PokiProvider implements AdProvider {
         const withReward = await sdk.rewardedBreak();
         return Boolean(withReward);
       }
-      // Fallback if PokiSDK is loaded but rewardedBreak function is unavailable
-      await new Promise((resolve) => setTimeout(resolve, 750));
-      return true;
+      return false;
     } catch (err) {
-      console.warn("[PokiProvider] rewardedBreak error, falling back to success:", err);
-      return true;
+      console.warn("[PokiProvider] rewardedBreak error:", err);
+      return false;
     } finally {
       synth.unmuteAfterAd();
+      if (wasPlaying) {
+        this.gameplayStart();
+      }
     }
   }
 
   async showCommercialAd(): Promise<boolean> {
     await this.init();
     const sdk = this.sdk;
+    const wasPlaying = this._isPlaying;
+    if (wasPlaying) {
+      this.gameplayStop();
+    }
     synth.muteForAd();
 
     try {
@@ -102,6 +126,10 @@ export class PokiProvider implements AdProvider {
       return false;
     } finally {
       synth.unmuteAfterAd();
+      if (wasPlaying) {
+        this.gameplayStart();
+      }
     }
   }
 }
+

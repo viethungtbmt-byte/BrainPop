@@ -226,25 +226,19 @@ export const ShopModal: React.FC<ShopModalProps> = ({
       synth.playRankUp();
     };
 
-    const adTimeout = setTimeout(() => {
-      onSuccess();
-    }, 35000);
+    setWatchingItemId(item.id);
+    synth.playSelect();
 
     adManager.showRewardedAd()
       .then((withReward: boolean) => {
-        clearTimeout(adTimeout);
-        if (handled) return;
+        setWatchingItemId(null);
         if (withReward) {
           onSuccess();
-        } else {
-          setWatchingItemId(null);
         }
       })
       .catch((err: any) => {
-        clearTimeout(adTimeout);
-        if (handled) return;
+        setWatchingItemId(null);
         console.warn('Rewarded ad error in Shop:', err);
-        onSuccess();
       });
   };
 
