@@ -116,12 +116,12 @@ input, textarea, [contenteditable="true"] {
     margin-left: auto;
     margin-right: auto;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    transform: translateY(-2px);
+    transform: none;
     box-shadow: 0 8px 20px -3px rgba(0, 0, 0, 0.18), 0 3px 8px -1px rgba(0, 0, 0, 0.12);
   }
 
   .poki-match-card:hover {
-    transform: translateY(-5px);
+    transform: scale(1.015);
     box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.24), 0 6px 12px -2px rgba(0, 0, 0, 0.14);
   }
 
@@ -132,12 +132,12 @@ input, textarea, [contenteditable="true"] {
     margin-left: auto;
     margin-right: auto;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    transform: translateY(-2px);
+    transform: none;
     box-shadow: 0 6px 18px -3px rgba(0, 0, 0, 0.16), 0 2px 6px -1px rgba(0, 0, 0, 0.1);
   }
 
   .poki-memory-card:hover {
-    transform: translateY(-5px);
+    transform: scale(1.015);
     box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.22), 0 4px 10px -2px rgba(0, 0, 0, 0.14);
   }
 
@@ -179,7 +179,8 @@ input, textarea, [contenteditable="true"] {
     max-height: 100% !important;
     width: 100% !important;
     height: 100% !important;
-    aspect-ratio: 1 / 1 !important;
+    aspect-ratio: auto !important;
+    transform: none !important;
   }
 
   /* Override card sizes to become larger when the sidebar is collapsed */
@@ -452,33 +453,30 @@ input, textarea, [contenteditable="true"] {
 
 @keyframes combo-pop-fade {
   0% {
-    transform: scale(0.6) rotate(-5deg);
+    transform: scale(0.5) rotate(-5deg);
     opacity: 0;
   }
-  15% {
-    transform: scale(1.25) rotate(3deg);
+  13.3% {
+    transform: scale(1.22) rotate(2deg);
     opacity: 1;
   }
-  30% {
-    transform: scale(0.95) rotate(-2deg);
+  20% {
+    transform: scale(1.0) rotate(0deg);
     opacity: 1;
   }
-  45% {
-    transform: scale(1) rotate(0deg);
+  70% {
+    transform: scale(1.0) rotate(0deg) translateY(0);
     opacity: 1;
-  }
-  75% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
   }
   100% {
+    transform: scale(0.85) rotate(0deg) translateY(-25px);
     opacity: 0;
-    transform: scale(0.85) translateY(-30px);
   }
 }
 
 .animate-combo {
-  animation: combo-pop-fade 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  animation: combo-pop-fade 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  will-change: transform, opacity;
 }
 
 /* Portrait Mobile Layout ONLY: Make gameplay viewport/canvas fill the entire screen and stretch board/cards */
@@ -628,6 +626,69 @@ input, textarea, [contenteditable="true"] {
   flex-direction: row !important; /* Force side-by-side sidebar and main area */
 }
 
+/* Safari Landscape Compatibility Layer: Enforce exact visualViewport height when html.is-safari-landscape is active */
+html.is-safari-landscape .game-viewport-container,
+html.is-safari-landscape #poki-game-frame.poki-game-frame,
+html.is-safari-landscape main {
+  height: var(--safari-real-vh, 100dvh) !important;
+  max-height: var(--safari-real-vh, 100dvh) !important;
+  min-height: var(--safari-real-vh, 100dvh) !important;
+}
+
+/* Safari Landscape Compatibility Layer for Configuration Menu overlay */
+html.is-safari-landscape #mobile-menu-container {
+  position: absolute !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  height: var(--safari-real-vh, 100dvh) !important;
+  max-height: var(--safari-real-vh, 100dvh) !important;
+  min-height: var(--safari-real-vh, 100dvh) !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+}
+
+/* Safari Landscape Compatibility Layer for Shop Modal, Settings Modal & Overlay Backdrops */
+html.is-safari-landscape #shop-modal-backdrop,
+html.is-safari-landscape #settings-modal-backdrop,
+html.is-safari-landscape #memory-confirm-backdrop,
+html.is-safari-landscape #rank-up-backdrop,
+html.is-safari-landscape #highscore-popup-backdrop,
+html.is-safari-landscape #reset-confirm-backdrop,
+html.is-safari-landscape #how-to-play-backdrop,
+html.is-safari-landscape #memory-finished-backdrop,
+html.is-safari-landscape #memory-finished-2p-backdrop,
+html.is-safari-landscape #victory-celebration-backdrop,
+html.is-safari-landscape #gentle-snow-unlock-dialog {
+  position: absolute !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  height: var(--safari-real-vh, 100dvh) !important;
+  max-height: var(--safari-real-vh, 100dvh) !important;
+  min-height: var(--safari-real-vh, 100dvh) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure Shop Modal dialog content fits inside real visible viewport in Safari Landscape */
+html.is-safari-landscape #shop-modal-content {
+  max-height: calc(var(--safari-real-vh, 100dvh) - clamp(8px, 2.5vh, 20px)) !important;
+  height: calc(var(--safari-real-vh, 100dvh) - clamp(8px, 2.5vh, 20px)) !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure Settings Modal dialog content fits inside real visible viewport in Safari Landscape */
+html.is-safari-landscape #settings-modal-content {
+  max-height: calc(var(--safari-real-vh, 100dvh) - clamp(8px, 2.5vh, 20px)) !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+}
+
 /* Force game frame to be 100% fullscreen in Mobile Landscape */
 .is-mobile-landscape #poki-game-frame.poki-game-frame {
   aspect-ratio: auto !important;
@@ -658,26 +719,34 @@ input, textarea, [contenteditable="true"] {
   margin: 0 !important;
 }
 
-/* Mobile Config Menu full viewport placement (fully replaces the gameplay view) */
-.is-mobile-landscape #mobile-menu-container {
+/* Mobile Config Menu full viewport placement (always full screen and top overlay) */
+#mobile-menu-container {
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   width: 100vw !important;
+  width: 100dvw !important;
   height: 100vh !important;
   height: 100dvh !important;
   z-index: 9999 !important;
-  padding: 16px !important;
+  box-sizing: border-box !important;
+  background-color: #0c102b !important;
 }
 
-/* Modal backdrops in mobile landscape must render above mobile menu container (z-index 9999) */
-.is-mobile-landscape #settings-modal-backdrop,
-.is-mobile-landscape #shop-modal-backdrop,
-.is-mobile-landscape #memory-confirm-backdrop,
-.is-mobile-landscape #rank-up-backdrop,
-.is-mobile-landscape #highscore-popup-backdrop,
-.is-mobile-landscape #reset-confirm-backdrop,
-.is-mobile-landscape #how-to-play-backdrop {
+/* Modal backdrops must render above mobile menu container (z-index 9999) */
+#settings-modal-backdrop,
+#shop-modal-backdrop,
+#memory-confirm-backdrop,
+#rank-up-backdrop,
+#highscore-popup-backdrop,
+#reset-confirm-backdrop,
+#how-to-play-backdrop,
+#memory-finished-backdrop,
+#memory-finished-2p-backdrop,
+#victory-celebration-backdrop,
+#gentle-snow-unlock-dialog {
   z-index: 10000 !important;
 }
 
@@ -1353,6 +1422,11 @@ input, textarea, [contenteditable="true"] {
   padding-bottom: calc(clamp(48px, 6.5vh, 64px) + env(safe-area-inset-bottom, 8px)) !important;
 }
 
+/* Ensure GameViewportFrame content container has zero bottom padding on tablet portrait so footer sits flush */
+.is-tablet-portrait .game-viewport-content {
+  padding-bottom: 0 !important;
+}
+
 /* Tablet Portrait Branding Footer */
 .is-tablet-portrait .poki-branding-footer {
   position: absolute !important;
@@ -1608,9 +1682,9 @@ input, textarea, [contenteditable="true"] {
     border-radius: 10px !important;
   }
 
-  .is-tablet-landscape #poki-sidebar #rank-progress-card .h-3\.5,
-  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-progress-card .h-3\.5 {
-    height: 8px !important;
+  .is-tablet-landscape #poki-sidebar #rank-progress-card .h-7,
+  .game-viewport-container.is-tablet-landscape #poki-sidebar #rank-progress-card .h-7 {
+    height: 20px !important;
   }
 
   /* Compact button padding to prevent overflow while keeping text large and readable */
@@ -1639,4 +1713,221 @@ input, textarea, [contenteditable="true"] {
   animation: shimmer 1.8s infinite linear;
 }
 
+/* ==========================================================================
+   RESPONSIVE UI FIX: END GAME PANELS (LANDSCAPE MOBILE / TABLET)
+   Detects landscape mode on mobile/tablet (viewport height <= 600px in landscape).
+   Scales down & compacts end-game panels (Victory, Defeat, Draw, Results, Rank Up)
+   so that the entire panel (header, scores, breakdown, rewards, buttons) fits 
+   completely within the visible viewport without scrolling or clipping.
+   ========================================================================== */
+@media (orientation: landscape) and (max-height: 600px) {
+  /* Reduce backdrop padding in landscape */
+  #victory-celebration-backdrop,
+  #memory-finished-2p-backdrop,
+  #memory-finished-backdrop,
+  #rank-up-backdrop,
+  #gentle-snow-unlock-dialog {
+    padding: 6px 12px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
 
+  /* 1. Victory Celebration Panel */
+  #victory-celebration-panel {
+    max-width: 320px !important;
+    padding: 10px 16px !important;
+    border-radius: 16px !important;
+  }
+
+  #victory-celebration-panel .animate-bounce {
+    font-size: 2.5rem !important; /* 40px emoji */
+    margin-bottom: 2px !important;
+  }
+
+  #victory-celebration-panel h1 {
+    font-size: 1.25rem !important;
+    line-height: 1.2 !important;
+  }
+
+  /* 2. End Game Panels (2P / vsBot / Solo) */
+  #memory-finished-panel-2p,
+  #memory-finished-panel {
+    max-width: 390px !important;
+    padding: 8px 14px !important;
+    gap: 6px !important;
+    border-radius: 18px !important;
+    max-height: 98vh !important;
+    max-height: 98dvh !important;
+    margin: auto !important;
+  }
+
+  /* Inner wrapper inside finished modals */
+  #memory-finished-panel-2p > div,
+  #memory-finished-panel > div {
+    gap: 5px !important;
+  }
+
+  /* Trophy icon container */
+  #memory-finished-panel-2p .rounded-full.p-2\.5,
+  #memory-finished-panel .rounded-full.p-2\.5,
+  #memory-finished-panel-2p .rounded-full.p-3,
+  #memory-finished-panel .rounded-full.p-3 {
+    padding: 4px !important;
+  }
+
+  #memory-finished-panel-2p .w-7,
+  #memory-finished-panel-2p .w-9,
+  #memory-finished-panel .w-7,
+  #memory-finished-panel .w-9,
+  #memory-finished-panel-2p .h-7,
+  #memory-finished-panel-2p .h-9,
+  #memory-finished-panel .h-7,
+  #memory-finished-panel .h-9 {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+  }
+
+  /* Main headings & subtext */
+  #memory-finished-panel-2p h3,
+  #memory-finished-panel h3 {
+    font-size: 1.05rem !important;
+    line-height: 1.15 !important;
+  }
+
+  #memory-finished-panel-2p p,
+  #memory-finished-panel p {
+    font-size: 0.65rem !important;
+    margin-top: 0px !important;
+  }
+
+  /* Scoreboard breakdown card */
+  #memory-finished-panel-2p .rounded-xl,
+  #memory-finished-panel .rounded-xl,
+  #memory-finished-panel-2p .rounded-2xl,
+  #memory-finished-panel .rounded-2xl {
+    padding: 5px 10px !important;
+    gap: 3px !important;
+  }
+
+  /* Player score cards in 2P / vsBot modal */
+  #memory-finished-panel-2p .grid-cols-2 {
+    gap: 6px !important;
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+  }
+
+  #memory-finished-panel-2p .grid-cols-2 > div {
+    padding: 4px 6px !important;
+  }
+
+  #memory-finished-panel-2p .grid-cols-2 .text-3xl,
+  #memory-finished-panel-2p .grid-cols-2 .text-4xl {
+    font-size: 1.35rem !important; /* 22px emoji */
+    margin-bottom: 0px !important;
+  }
+
+  #memory-finished-panel-2p .grid-cols-2 .text-2xl,
+  #memory-finished-panel-2p .grid-cols-2 .text-3xl {
+    font-size: 1.2rem !important;
+    margin-top: 0px !important;
+    margin-bottom: 0px !important;
+  }
+
+  #memory-finished-panel-2p .grid-cols-2 span {
+    font-size: 0.6rem !important;
+  }
+
+  /* Buttons container & buttons */
+  #memory-finished-panel-2p .max-w-\[280px\],
+  #memory-finished-panel .max-w-\[280px\] {
+    gap: 4px !important;
+  }
+
+  #memory-finished-panel-2p button,
+  #memory-finished-panel button {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+    font-size: 0.7rem !important;
+  }
+
+  /* 3. Rank Up Modal Panel & Gentle Snow Unlock */
+  #rank-up-content,
+  #gentle-snow-unlock-card {
+    max-width: 300px !important;
+    padding: 10px 14px !important;
+    gap: 6px !important;
+    border-radius: 20px !important;
+    max-height: 98vh !important;
+    max-height: 98dvh !important;
+  }
+
+  #rank-up-content .w-14,
+  #rank-up-content .h-14 {
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+  }
+
+  #rank-up-content .p-4.rounded-full {
+    padding: 8px !important;
+  }
+
+  #rank-up-content h3 {
+    font-size: 1.1rem !important;
+  }
+
+  #rank-up-content button,
+  #gentle-snow-unlock-card button {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+}
+
+/* Proportional scaling for ultra-short mobile landscape screens (height <= 440px) */
+@media (orientation: landscape) and (max-height: 440px) {
+  #victory-celebration-panel,
+  #memory-finished-panel-2p,
+  #memory-finished-panel,
+  #rank-up-content,
+  #gentle-snow-unlock-card {
+    transform: scale(0.86);
+    transform-origin: center center;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 380px) {
+  #victory-celebration-panel,
+  #memory-finished-panel-2p,
+  #memory-finished-panel,
+  #rank-up-content,
+  #gentle-snow-unlock-card {
+    transform: scale(0.76);
+    transform-origin: center center;
+  }
+}
+
+/* Enforce immediate fixed viewport centering for orientation change overlay */
+#orientation-change-spinner-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 999999 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+#orientation-change-spinner-overlay > div {
+  margin: auto !important;
+  transform: none !important;
+}

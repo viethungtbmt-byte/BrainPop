@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { 
   Volume2, 
   VolumeX, 
@@ -57,7 +58,8 @@ import { GentleSnowUnlockModal } from "./components/modals/GentleSnowUnlockModal
 import { GameStartConfirmModal } from "./components/modals/GameStartConfirmModal";
 import { RankUpModal } from "./components/modals/RankUpModal";
 import { HighScoreModal } from "./components/modals/HighScoreModal";
-import { TRANSLATIONS, Language } from "./locales";
+import { getNextBotUsername } from "./data/botNames";
+import { TRANSLATIONS, Language, getAutoDetectedLanguage, SUPPORTED_LANGUAGES } from "./locales";
 import { adManager } from "./ads/AdManager";
 import { 
   BotMemoryManager, 
@@ -65,10 +67,12 @@ import {
   selectRandomBotDifficulty, 
   getBotConfig,
   selectBotDifficultyForTrophies,
-  getBoardSizeForTrophies
+  getBoardSizeForTrophies,
+  getRankForTrophies,
+  getRankProgressPercentage
 } from "./BOT";
 import { UNIQUE_EMOJIS } from "./emoji/emojis";
-import { generateMemoryBoard } from "./emoji/memory";
+import { generateMemoryBoard, getTargetPairsToWin } from "./emoji/memory";
 import { EMBEDDED_PAIRS } from "./emoji/related";
 import { synth } from "./audio";
 import { 
@@ -100,7 +104,7 @@ import { useLayoutConfig } from "./hooks/useLayoutConfig";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { PanelBackground } from "./components/PanelBackground";
 
-export type BoardSizeKey = "3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8";
+export type BoardSizeKey = "3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8" | "7x8";
 
 export default function App() {
   // Preloader state
@@ -117,8 +121,10 @@ export default function App() {
   // Language configuration ("vi" | "en" | "es" | "pt" | "tr" | "de" | "fr" | "it" | "ru" | "id" | "zh-TW" | "ja" | "ko" | "pl" | "nl" | "th")
   const [language, setLanguage] = useState<Language>((): Language => {
     const saved = localStorage.getItem("emoji_brainpop_lang");
-    if (saved === "vi" || saved === "en" || saved === "es" || saved === "pt" || saved === "tr" || saved === "de" || saved === "fr" || saved === "it" || saved === "ru" || saved === "id" || saved === "zh-TW" || saved === "ja" || saved === "ko" || saved === "pl" || saved === "nl" || saved === "th") return saved;
-    return "en";
+    if (saved && (SUPPORTED_LANGUAGES as string[]).includes(saved)) {
+      return saved as Language;
+    }
+    return getAutoDetectedLanguage();
   });
 
   // Settings Modal open state
@@ -133,6 +139,7 @@ export default function App() {
     return saved ? parseInt(saved, 10) : 0;
   });
   const [showGentleSnowModal, setShowGentleSnowModal] = useState<boolean>(false);
+  const [hasPendingGentleSnow, setHasPendingGentleSnow] = useState<boolean>(false);
   const [shopHighlightItemId, setShopHighlightItemId] = useState<string | null>(null);
 
   // One-time interactive guided tutorial state for first-time players
@@ -156,7 +163,7 @@ export default function App() {
       if (oldSaved) {
         const ts = parseInt(oldSaved, 10);
         if (ts > Date.now()) {
-          return { "6x6": ts, "6x8": ts };
+          return { "6x8": ts };
         }
       }
     } catch (e) {
@@ -168,8 +175,8 @@ export default function App() {
   const isBoardSizeUnlocked = (sizeKey: string, mode: string = memoryMode) => {
     // Challenge Mode (vsBot) is completely unaffected (trophy based)
     if (mode === "vsBot") return true;
-    // Classic & 2 Players: 36 Cards ("6x6") and 48 Cards ("6x8") require ad watch PER board size
-    if (sizeKey === "6x6" || sizeKey === "6x8") {
+    // Classic & 2 Players: 48 Cards ("6x8") and 56 Cards ("7x8") require ad watch PER board size
+    if (sizeKey === "6x8" || sizeKey === "7x8") {
       const until = boardSizeUnlocks[sizeKey] || 0;
       return Date.now() < until;
     }
@@ -248,6 +255,21 @@ export default function App() {
     setEquippedMusic(id);
   };
 
+  // Sync equipped states with inventory (auto-reverts if temporary items expire)
+  useEffect(() => {
+    const activeEffect = getEquippedEffect();
+    if (activeEffect !== equippedEffect) setEquippedEffectState(activeEffect);
+
+    const activeCardBack = getEquippedCardBack();
+    if (activeCardBack !== equippedCardBackId) setEquippedCardBackState(activeCardBack);
+
+    const activeTheme = getEquippedTheme();
+    if (activeTheme !== equippedThemeId) setEquippedThemeState(activeTheme);
+
+    const activeMusic = getEquippedMusic();
+    if (activeMusic !== equippedMusicId) setEquippedMusicState(activeMusic);
+  }, [isShopOpen]);
+
   // Language selection dropdown state
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState<boolean>(false);
 
@@ -277,6 +299,7 @@ export default function App() {
 
   const {
     config: layoutConfig,
+    isOrienting,
     isPortrait,
     isMobile,
     isTablet,
@@ -292,7 +315,7 @@ export default function App() {
   const [landscapeMenuTab, setLandscapeMenuTab] = useState<"home" | "settings" | "shop" | "theme" | "language">("home");
   const [isMenuDrawerOpen, setIsMenuDrawerOpen] = useState<boolean>(false);
 
-  // Reset or reapply UI visibility states on every orientation / layout configuration change
+  // Close temporary popover dropdowns when layout name changes
   useEffect(() => {
     setIsBoardSizeDropdownOpen(false);
     setIsBoardSizeDropdownOpenMobile(false);
@@ -301,28 +324,17 @@ export default function App() {
     setIsPlayModeDropdownOpenMobile(false);
     setIsDiffDropdownOpen(false);
     setIsHowToPlayOpen(false);
-    setIsMobileConfigOpen(false);
-    setIsMenuDrawerOpen(false);
-    setIsSidebarCollapsed(false);
-  }, [layoutConfig.name]);
+    setIsLangDropdownOpen(false);
 
-  // Track orientation changes for viewport layout fitting without interfering with game pause state
-  const wasLandscapeRef = useRef<boolean>(window.innerWidth > window.innerHeight);
+    if (!layoutConfig.allowMobileConfigMenu) {
+      setIsMobileConfigOpen(false);
+    }
+  }, [layoutConfig.name, layoutConfig.allowMobileConfigMenu]);
+
+  const wasLandscapeRef = useRef<boolean>(!isPortrait);
   useEffect(() => {
-    const handleOrientationTransition = () => {
-      const currentWidth = window.innerWidth;
-      const currentHeight = window.innerHeight;
-      wasLandscapeRef.current = currentWidth > currentHeight;
-    };
-
-    window.addEventListener("resize", handleOrientationTransition);
-    window.addEventListener("orientationchange", handleOrientationTransition);
-
-    return () => {
-      window.removeEventListener("resize", handleOrientationTransition);
-      window.removeEventListener("orientationchange", handleOrientationTransition);
-    };
-  }, []);
+    wasLandscapeRef.current = !isPortrait;
+  }, [isPortrait]);
 
   // Localization helper
   const t = TRANSLATIONS[language];
@@ -406,8 +418,12 @@ export default function App() {
   // --- TAB 1: CONNECTING CARDS STATE & SYSTEM ---
   const [level, setLevel] = useState<number>(1);
   const [levelHistory, setLevelHistory] = useState<Record<number, { from: string; to: string }[]>>(() => {
-    const saved = localStorage.getItem("novel_match_level_history");
-    return saved ? JSON.parse(saved) : {};
+    try {
+      const saved = localStorage.getItem("novel_match_level_history");
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
   });
   const [leftCards, setLeftCards] = useState<string[]>([]);
   const [rightCards, setRightCards] = useState<string[]>([]);
@@ -501,29 +517,36 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.memoryCards && parsed.memoryCards.length > 0 && !parsed.memoryFinished) {
-          return parsed;
+          const totalPlayable = parsed.memoryCards.filter((c: string) => c !== "BLOCKED").length;
+          const matchedCount = new Set((parsed.memoryMatched || []).filter((idx: number) => parsed.memoryCards[idx] !== "BLOCKED")).size;
+          if (matchedCount < totalPlayable) {
+            return parsed;
+          }
         }
       } catch (e) {}
+      localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
     }
     return null;
   }, []);
 
-  const isRestoredRef = useRef(!!savedVsBotMatch);
+  const savedLastMode = useMemo(() => {
+    try {
+      const saved = localStorage.getItem("emoji_brainpop_last_mode");
+      if (saved === "twoPlayers" || saved === "vsBot" || saved === "solo") {
+        return saved as "solo" | "twoPlayers" | "vsBot";
+      }
+    } catch (e) {}
+    return "solo"; // Default mode for new sessions
+  }, []);
+
+  // Restore VS Bot match ONLY if player explicitly left while in VS Bot mode
+  const shouldRestoreVsBot = useMemo(() => {
+    return savedLastMode === "vsBot" && !!savedVsBotMatch;
+  }, [savedLastMode, savedVsBotMatch]);
+
+  const isRestoredRef = useRef(shouldRestoreVsBot);
   const trophiesUpdatedRef = useRef<boolean>(false);
   const p2pWinsUpdatedRef = useRef<boolean>(false);
-
-  const getRankForTrophies = (trophies: number) => {
-    if (trophies <= 20) return { id: 0, nameKey: "rankBeginner" as const, badgeType: "shield" as const, color: "text-amber-700", fill: "#b45309", border: "border-amber-700/30", bg: "bg-amber-500/10", shadow: "shadow-amber-500/10" };
-    if (trophies <= 50) return { id: 1, nameKey: "rankRookie" as const, badgeType: "shield" as const, color: "text-slate-400", fill: "#94a3b8", border: "border-slate-400/30", bg: "bg-slate-400/10", shadow: "shadow-slate-400/10" };
-    if (trophies <= 120) return { id: 2, nameKey: "rankApprentice" as const, badgeType: "shield" as const, color: "text-emerald-500", fill: "#10b981", border: "border-emerald-500/30", bg: "bg-emerald-500/10", shadow: "shadow-emerald-500/10" };
-    if (trophies <= 220) return { id: 3, nameKey: "rankSkilled" as const, badgeType: "shield" as const, color: "text-blue-500", fill: "#3b82f6", border: "border-blue-500/30", bg: "bg-blue-500/10", shadow: "shadow-blue-500/10" };
-    if (trophies <= 350) return { id: 4, nameKey: "rankExpert" as const, badgeType: "shield" as const, color: "text-fuchsia-500", fill: "#d946ef", border: "border-fuchsia-500/30", bg: "bg-fuchsia-500/10", shadow: "shadow-fuchsia-500/10" };
-    if (trophies <= 550) return { id: 5, nameKey: "rankMaster" as const, badgeType: "shield" as const, color: "text-yellow-500", fill: "#eab308", border: "border-yellow-500/30", bg: "bg-yellow-500/10", shadow: "shadow-yellow-500/10" };
-    if (trophies <= 800) return { id: 6, nameKey: "rankElite" as const, badgeType: "shield" as const, color: "text-rose-600", fill: "#e11d48", border: "border-rose-600/30", bg: "bg-rose-500/10", shadow: "shadow-rose-500/10" };
-    return { id: 7, nameKey: "rankLegend" as const, badgeType: "crown" as const, color: "text-amber-400 font-extrabold animate-pulse", fill: "#fbbf24", border: "border-amber-400/40", bg: "bg-amber-500/15", shadow: "shadow-amber-400/20" };
-  };
-
-
 
   const [vsBotTrophies, setVsBotTrophies] = useState<number>(() => {
     const savedNew = localStorage.getItem("emoji_brainpop_vs_bot_trophies");
@@ -533,9 +556,19 @@ export default function App() {
     return 0;
   });
 
-  const [memoryMode, setMemoryMode] = useState<"solo" | "twoPlayers" | "vsBot">(() => {
-    return savedVsBotMatch ? "vsBot" : "solo";
-  });
+  const [memoryMode, setMemoryModeState] = useState<"solo" | "twoPlayers" | "vsBot">(
+    shouldRestoreVsBot ? "vsBot" : savedLastMode
+  );
+
+  const setMemoryMode = useCallback((action: "solo" | "twoPlayers" | "vsBot" | ((prev: "solo" | "twoPlayers" | "vsBot") => "solo" | "twoPlayers" | "vsBot")) => {
+    setMemoryModeState(prev => {
+      const nextMode = typeof action === "function" ? action(prev) : action;
+      try {
+        localStorage.setItem("emoji_brainpop_last_mode", nextMode);
+      } catch (e) {}
+      return nextMode;
+    });
+  }, []);
 
   const [winsP1, setWinsP1] = useState<number>(() => {
     const saved = localStorage.getItem("emoji_brainpop_2p_wins_p1");
@@ -552,30 +585,7 @@ export default function App() {
   const currentRank = useMemo(() => getRankForTrophies(vsBotTrophies), [vsBotTrophies]);
 
   const rankProgressPercentage = useMemo(() => {
-    const trophies = vsBotTrophies;
-    if (trophies <= 0) return 0;
-    if (trophies <= 20) {
-      return Math.round((trophies / 20) * 100);
-    }
-    if (trophies <= 50) {
-      return Math.round(((trophies - 20) / (50 - 20)) * 100);
-    }
-    if (trophies <= 120) {
-      return Math.round(((trophies - 50) / (120 - 50)) * 100);
-    }
-    if (trophies <= 220) {
-      return Math.round(((trophies - 120) / (220 - 120)) * 100);
-    }
-    if (trophies <= 350) {
-      return Math.round(((trophies - 220) / (350 - 220)) * 100);
-    }
-    if (trophies <= 550) {
-      return Math.round(((trophies - 350) / (550 - 350)) * 100);
-    }
-    if (trophies <= 800) {
-      return Math.round(((trophies - 550) / (800 - 550)) * 100);
-    }
-    return 100; // Legend is maximum rank
+    return getRankProgressPercentage(vsBotTrophies);
   }, [vsBotTrophies]);
 
   const rankProgressDisplay = useMemo(() => {
@@ -586,6 +596,7 @@ export default function App() {
   const [rankUpBadge, setRankUpBadge] = useState<any>(null);
   const [isRankPromotion, setIsRankPromotion] = useState<boolean>(true);
   const lastRankIdRef = useRef<number | null>(null);
+  const lastGeneratedConfigRef = useRef<{ diff: string; mode: string } | null>(null);
 
   useEffect(() => {
     const currentRankInfo = getRankForTrophies(vsBotTrophies);
@@ -622,13 +633,10 @@ export default function App() {
   // 6x6: 36 cards (18 unique pairs)
   // 6x8: 48 cards (24 unique pairs)
   const [matchSessionId, setMatchSessionId] = useState<string>(() => {
-    return savedVsBotMatch ? (savedVsBotMatch.matchSessionId || Date.now().toString()) : Date.now().toString();
+    return shouldRestoreVsBot ? (savedVsBotMatch.matchSessionId || Date.now().toString()) : Date.now().toString();
   });
   const [difficulty, setDifficulty] = useState<"3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8" | any>(() => {
-    if (memoryMode === "vsBot") {
-      return getBoardSizeForTrophies(vsBotTrophies);
-    }
-    if (savedVsBotMatch && savedVsBotMatch.memoryCards) {
+    if (shouldRestoreVsBot && savedVsBotMatch && savedVsBotMatch.memoryCards) {
       if (savedVsBotMatch.memoryCards.length === 12) return "3x4";
       if (savedVsBotMatch.memoryCards.length === 16) return "4x4";
       if (savedVsBotMatch.memoryCards.length === 20) return "4x5";
@@ -636,35 +644,46 @@ export default function App() {
       if (savedVsBotMatch.memoryCards.length === 30) return "5x6";
       if (savedVsBotMatch.memoryCards.length === 36) return "6x6";
       if (savedVsBotMatch.memoryCards.length === 48) return "6x8";
+      if (savedVsBotMatch.memoryCards.length === 56) return "7x8";
+    }
+    if (savedLastMode === "vsBot") {
+      return getBoardSizeForTrophies(vsBotTrophies);
+    }
+    if (savedLastMode === "twoPlayers") {
+      return "5x5";
     }
     return "3x4";
   });
   const [memoryCards, setMemoryCards] = useState<string[]>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.memoryCards : [];
+    return shouldRestoreVsBot ? savedVsBotMatch.memoryCards : [];
   });
   const [memoryMatched, setMemoryMatched] = useState<number[]>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.memoryMatched : [];
+    return shouldRestoreVsBot ? savedVsBotMatch.memoryMatched : [];
   });
   const [matchedByP1, setMatchedByP1] = useState<number[]>(() => {
-    return savedVsBotMatch ? (savedVsBotMatch.matchedByP1 || []) : [];
+    return shouldRestoreVsBot ? (savedVsBotMatch.matchedByP1 || []) : [];
   });
   const [memoryFlipped, setMemoryFlipped] = useState<number[]>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.memoryFlipped : [];
+    return shouldRestoreVsBot ? savedVsBotMatch.memoryFlipped : [];
   });
+  const [memoryMismatch, setMemoryMismatch] = useState<number[]>([]);
   const [memoryMoves, setMemoryMoves] = useState<number>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.memoryMoves : 0;
+    return shouldRestoreVsBot ? savedVsBotMatch.memoryMoves : 0;
   });
   const [memoryFinished, setMemoryFinished] = useState<boolean>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.memoryFinished : false;
+    return shouldRestoreVsBot ? savedVsBotMatch.memoryFinished : false;
   });
   const [memoryBusy, setMemoryBusy] = useState<boolean>(false);
+  const isClickProcessingRef = useRef<boolean>(false);
+  const pendingFlippedRef = useRef<number[]>(shouldRestoreVsBot && savedVsBotMatch ? (savedVsBotMatch.memoryFlipped || []) : []);
+  const botThinkingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- MEMORY GAME START CONFIRMATION STATE ---
   const [pendingDifficulty, setPendingDifficulty] = useState<"3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8" | any>(() => {
-    return savedVsBotMatch ? "5x6" : "3x4";
+    return shouldRestoreVsBot ? "5x6" : "3x4";
   });
   const [pendingMemoryMode, setPendingMemoryMode] = useState<"solo" | "twoPlayers" | "vsBot" | any>(() => {
-    return savedVsBotMatch ? "vsBot" : "solo";
+    return shouldRestoreVsBot ? "vsBot" : savedLastMode;
   });
   const [showMemoryConfirm, setShowMemoryConfirm] = useState(false);
 
@@ -673,6 +692,8 @@ export default function App() {
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const [memoryCardSizing, setMemoryCardSizing] = useState<{
     cardSize: number;
+    cardWidth: number;
+    cardHeight: number;
     gap: number;
     cols: number;
     rows: number;
@@ -681,6 +702,8 @@ export default function App() {
     hideLockedCard?: boolean;
   }>({
     cardSize: 80,
+    cardWidth: 80,
+    cardHeight: 80,
     gap: 8,
     cols: 4,
     rows: 4,
@@ -689,166 +712,212 @@ export default function App() {
     hideLockedCard: false,
   });
 
-  useEffect(() => {
-    const calculateSizing = () => {
-      const container = gridWrapperRef.current || memoryGridAreaRef.current;
-      if (!container) return;
+  const calculateSizing = useCallback((overrideDiff?: string, explicitW?: number, explicitH?: number) => {
+    if (isMobileConfigOpen) return;
+    let w = explicitW || 0;
+    let h = explicitH || 0;
 
-      const rect = container.getBoundingClientRect();
-      const availW = Math.max(0, rect.width - 8);
-      const availH = Math.max(0, rect.height - 8);
+    if (w <= 0 || h <= 0) {
+      if (gridWrapperRef.current) {
+        const rect = gridWrapperRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          w = rect.width;
+          h = rect.height;
+        }
+      }
+      if ((w <= 0 || h <= 0) && memoryGridAreaRef.current) {
+        const rect = memoryGridAreaRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          w = rect.width;
+          h = rect.height;
+        }
+      }
+    }
 
-      if (availW <= 0 || availH <= 0) return;
+    const availW = Math.max(0, w - 8);
+    const availH = Math.max(0, h - 8);
 
-      // Dynamic presets tailored for landscape vs standard layout
-      type LayoutCandidate = { cols: number; rows: number; hideLockedCard?: boolean };
+    if (availW <= 0 || availH <= 0) return;
 
-      const isLandscapeOrientation = isMobileLandscape || (!isPortrait && availW > availH * 1.15);
+    const activeDifficulty = overrideDiff || difficulty || "3x4";
 
-      let candidates: LayoutCandidate[] = [];
+    // Dynamic presets tailored for landscape vs standard layout
+    type LayoutCandidate = { cols: number; rows: number; hideLockedCard?: boolean };
 
-      if (difficulty === "5x5") {
-        // 25 Cards mode:
-        // When landscape orientation, evaluate candidates with or without locked card.
-        // Option 1: Keep locked card (25 cards) -> [5, 5] (100% full 5x5 grid)
-        // Option 2: Remove (hide) locked card (24 cards) -> [8, 3], [6, 4] in landscape; [4, 6] in portrait
-        if (isLandscapeOrientation) {
-          candidates = [
-            { cols: 8, rows: 3, hideLockedCard: true },  // 24 cards = 3 full rows of 8 (100% full, wide)
-            { cols: 6, rows: 4, hideLockedCard: true },  // 24 cards = 4 full rows of 6 (100% full, balanced)
-            { cols: 5, rows: 5, hideLockedCard: false }, // 25 cards = 5x5 square
-          ];
+    const isLandscapeOrientation = isMobileLandscape || (!isPortrait && availW > availH * 1.15);
+
+    let candidates: LayoutCandidate[] = [];
+
+    if (activeDifficulty === "5x5") {
+      // 25 Cards mode:
+      if (isLandscapeOrientation) {
+        candidates = [
+          { cols: 8, rows: 3, hideLockedCard: true },  // 24 cards = 3 full rows of 8
+          { cols: 6, rows: 4, hideLockedCard: true },  // 24 cards = 4 full rows of 6
+          { cols: 5, rows: 5, hideLockedCard: false }, // 25 cards = 5x5 square
+        ];
+      } else {
+        candidates = [
+          { cols: 5, rows: 5, hideLockedCard: false }, // 25 cards = 5x5 square
+          { cols: 4, rows: 6, hideLockedCard: true },  // 24 cards = 6 full rows of 4
+          { cols: 3, rows: 8, hideLockedCard: true },  // 24 cards = 8 full rows of 3
+        ];
+      }
+    } else {
+      const MOBILE_LANDSCAPE_PRESETS: Record<string, [number, number][]> = {
+        "3x4": [[6, 2], [4, 3], [3, 4]],
+        "4x4": [[8, 2], [4, 4]],
+        "4x5": [[10, 2], [5, 4], [4, 5]],
+        "5x6": [[10, 3], [6, 5], [5, 6]],
+        "6x6": [[9, 4], [12, 3], [6, 6]],
+        "6x8": [[12, 4], [16, 3], [8, 6], [6, 8]],
+        "7x8": [[14, 4], [8, 7], [7, 8]],
+      };
+
+      const BOARD_LAYOUT_PRESETS: Record<string, [number, number][]> = {
+        "3x4": [[3, 4], [4, 3]],
+        "4x4": [[4, 4]],
+        "4x5": [[4, 5], [5, 4]],
+        "5x6": [[5, 6], [6, 5]],
+        "6x6": [[6, 6]],
+        "6x8": [[6, 8], [8, 6]],
+        "7x8": [[7, 8], [8, 7]],
+      };
+
+      const presetList = (isLandscapeOrientation ? MOBILE_LANDSCAPE_PRESETS[activeDifficulty] : BOARD_LAYOUT_PRESETS[activeDifficulty]) || [[4, 4]];
+      candidates = presetList.map(([c, r]) => ({ cols: c, rows: r, hideLockedCard: false }));
+    }
+
+    const minDim = Math.min(availW, availH);
+    const gap = Math.max(2, Math.min(10, Math.floor(minDim / 90)));
+
+    let bestCols = candidates[0].cols;
+    let bestRows = candidates[0].rows;
+    let bestHideLockedCard = candidates[0].hideLockedCard || false;
+    let bestScore = -1;
+    let bestCardW = -1;
+    let bestCardH = -1;
+
+    for (const cand of candidates) {
+      const { cols: c, rows: r, hideLockedCard } = cand;
+      const maxCardW = (availW - (c - 1) * gap) / c;
+      const maxCardH = (availH - (r - 1) * gap) / r;
+
+      if (maxCardW <= 0 || maxCardH <= 0) continue;
+
+      let cardW = Math.floor(maxCardW);
+      let cardH = Math.floor(maxCardH);
+
+      // Gently guard against extreme distortion if aspect ratio is way out of bounds
+      const cardRatio = cardH > 0 ? cardW / cardH : 1;
+      if (cardRatio > 1.85) {
+        cardW = Math.floor(cardH * 1.85);
+      } else if (cardRatio < 0.45) {
+        cardH = Math.floor(cardW / 0.45);
+      }
+
+      cardW = Math.max(16, cardW);
+      cardH = Math.max(16, cardH);
+
+      let aspectBonus = 1.0;
+      if (isLandscapeOrientation) {
+        if (cardRatio >= 0.55 && cardRatio <= 1.45) {
+          aspectBonus = 1.35;
+        } else if (cardRatio >= 0.45 && cardRatio <= 1.85) {
+          aspectBonus = 1.0;
         } else {
-          candidates = [
-            { cols: 5, rows: 5, hideLockedCard: false }, // 25 cards = 5x5 square (preferred in portrait)
-            { cols: 4, rows: 6, hideLockedCard: true },  // 24 cards = 6 full rows of 4
-            { cols: 3, rows: 8, hideLockedCard: true },  // 24 cards = 8 full rows of 3
-          ];
+          aspectBonus = 0.5;
         }
       } else {
-        const MOBILE_LANDSCAPE_PRESETS: Record<string, [number, number][]> = {
-          "3x4": [[6, 2], [4, 3], [3, 4]],
-          "4x4": [[8, 2], [4, 4]],
-          "4x5": [[10, 2], [5, 4], [4, 5]],
-          "5x6": [[10, 3], [6, 5], [5, 6]],
-          "6x6": [[9, 4], [12, 3], [6, 6]],
-          "6x8": [[12, 4], [16, 3], [8, 6], [6, 8]],
-        };
-
-        const BOARD_LAYOUT_PRESETS: Record<string, [number, number][]> = {
-          "3x4": [[4, 3], [3, 4]],
-          "4x4": [[4, 4]],
-          "4x5": [[5, 4], [4, 5]],
-          "5x6": [[6, 5], [5, 6]],
-          "6x6": [[6, 6]],
-          "6x8": [[8, 6], [6, 8]],
-        };
-
-        const presetList = (isLandscapeOrientation ? MOBILE_LANDSCAPE_PRESETS[difficulty] : BOARD_LAYOUT_PRESETS[difficulty]) || [[4, 4]];
-        candidates = presetList.map(([c, r]) => ({ cols: c, rows: r, hideLockedCard: false }));
-      }
-
-      const minDim = Math.min(availW, availH);
-      const gap = Math.max(3, Math.min(12, Math.floor(minDim / 80)));
-
-      let bestCols = candidates[0].cols;
-      let bestRows = candidates[0].rows;
-      let bestHideLockedCard = candidates[0].hideLockedCard || false;
-      let bestScore = -1;
-      let bestCardSize = -1;
-
-      for (const cand of candidates) {
-        const { cols: c, rows: r, hideLockedCard } = cand;
-        const maxCardW = (availW - (c - 1) * gap) / c;
-        const maxCardH = (availH - (r - 1) * gap) / r;
-        const possibleCardSize = Math.floor(Math.min(maxCardW, maxCardH));
-
-        // For landscape orientation, give a slight score multiplier to wider grids (c > r)
-        const landscapeBonus = (isLandscapeOrientation && c > r) ? 1.12 : 1.0;
-        // In portrait mode, prefer standard square 5x5 with locked card if available
-        const portraitBonus = (!isLandscapeOrientation && !hideLockedCard && c === r) ? 1.35 : 1.0;
-        const candidateScore = possibleCardSize * landscapeBonus * portraitBonus;
-
-        if (candidateScore > bestScore + 0.5) {
-          bestScore = candidateScore;
-          bestCardSize = possibleCardSize;
-          bestCols = c;
-          bestRows = r;
-          bestHideLockedCard = !!hideLockedCard;
-        } else if (Math.abs(candidateScore - bestScore) <= 0.5) {
-          const candidateIsLandscape = c >= r;
-          const containerIsLandscape = availW >= availH;
-          if (candidateIsLandscape === containerIsLandscape) {
-            bestScore = candidateScore;
-            bestCardSize = possibleCardSize;
-            bestCols = c;
-            bestRows = r;
-            bestHideLockedCard = !!hideLockedCard;
-          }
+        if (cardRatio >= 0.65 && cardRatio <= 1.3) {
+          aspectBonus = 1.35;
+        } else if (cardRatio >= 0.45 && cardRatio <= 1.6) {
+          aspectBonus = 1.0;
+        } else {
+          aspectBonus = 0.5;
         }
       }
 
-      const cardSize = Math.max(20, bestCardSize);
-      const gridWidth = bestCols * cardSize + (bestCols - 1) * gap;
-      const gridHeight = bestRows * cardSize + (bestRows - 1) * gap;
+      const cardArea = cardW * cardH;
+      const landscapeBonus = (isLandscapeOrientation && c >= r) ? 1.15 : 1.0;
+      const portraitBonus = (!isLandscapeOrientation && !hideLockedCard && r >= c) ? 1.15 : 1.0;
 
-      setMemoryCardSizing({
-        cardSize,
+      const candidateScore = cardArea * aspectBonus * landscapeBonus * portraitBonus;
+
+      if (candidateScore > bestScore + 0.5) {
+        bestScore = candidateScore;
+        bestCardW = cardW;
+        bestCardH = cardH;
+        bestCols = c;
+        bestRows = r;
+        bestHideLockedCard = !!hideLockedCard;
+      }
+    }
+
+    const cardW = Math.max(16, bestCardW);
+    const cardH = Math.max(16, bestCardH);
+    const cardMinDim = Math.min(cardW, cardH);
+    const gridWidth = bestCols * cardW + (bestCols - 1) * gap;
+    const gridHeight = bestRows * cardH + (bestRows - 1) * gap;
+
+    setMemoryCardSizing(prev => {
+      if (
+        prev.cardSize === cardMinDim &&
+        prev.cardWidth === cardW &&
+        prev.cardHeight === cardH &&
+        prev.gap === gap &&
+        prev.cols === bestCols &&
+        prev.rows === bestRows &&
+        prev.gridWidth === gridWidth &&
+        prev.gridHeight === gridHeight &&
+        prev.hideLockedCard === bestHideLockedCard
+      ) {
+        return prev;
+      }
+      return {
+        cardSize: cardMinDim,
+        cardWidth: cardW,
+        cardHeight: cardH,
         gap,
         cols: bestCols,
         rows: bestRows,
         gridWidth,
         gridHeight,
         hideLockedCard: bestHideLockedCard,
-      });
-    };
+      };
+    });
+  }, [difficulty, isMobileLandscape, isPortrait, isMobileConfigOpen]);
+
+  useEffect(() => {
+    if (activeTab !== "memory" || isMobileConfigOpen || isOrienting) return;
 
     calculateSizing();
-
-    const t1 = setTimeout(calculateSizing, 20);
-    const t2 = setTimeout(calculateSizing, 80);
-    const t3 = setTimeout(calculateSizing, 200);
-    const t4 = setTimeout(calculateSizing, 400);
-    const raf = requestAnimationFrame(calculateSizing);
-
-    const observer = new ResizeObserver(() => {
+    const rafId = requestAnimationFrame(() => {
       calculateSizing();
+    });
+
+    const observer = new ResizeObserver((entries) => {
+      if (isMobileConfigOpen || isOrienting) return;
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          calculateSizing(undefined, entry.contentRect.width, entry.contentRect.height);
+        } else {
+          calculateSizing();
+        }
+      }
     });
 
     if (gridWrapperRef.current) {
       observer.observe(gridWrapperRef.current);
-    }
-    if (memoryGridAreaRef.current) {
+    } else if (memoryGridAreaRef.current) {
       observer.observe(memoryGridAreaRef.current);
     }
-    window.addEventListener("resize", calculateSizing);
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(rafId);
       observer.disconnect();
-      window.removeEventListener("resize", calculateSizing);
     };
-  }, [
-    difficulty,
-    memoryMode,
-    activeTab,
-    isSidebarCollapsed,
-    layoutConfig.name,
-    matchSessionId,
-    memoryCards.length,
-    showMemoryConfirm,
-    isMobileConfigOpen,
-    isMenuDrawerOpen,
-    isBoardSizeDropdownOpen,
-    isBoardSizeDropdownOpenMobile,
-    isPaused,
-    isMobileLandscape,
-    isPortrait
-  ]);
+  }, [calculateSizing, activeTab, isMobileConfigOpen, isOrienting]);
 
   // --- PREMIUM VICTORY CELEBRATION STATE ---
   const [showVictoryCelebration, setShowVictoryCelebration] = useState<boolean>(false);
@@ -857,37 +926,50 @@ export default function App() {
 
   // --- 2 PLAYERS GAME STATE ---
   const [p1Score, setP1Score] = useState<number>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.p1Score : 0;
+    return shouldRestoreVsBot && savedVsBotMatch ? savedVsBotMatch.p1Score : 0;
   });
   const [p2Score, setP2Score] = useState<number>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.p2Score : 0;
+    return shouldRestoreVsBot && savedVsBotMatch ? savedVsBotMatch.p2Score : 0;
   });
   const [activePlayer, setActivePlayer] = useState<1 | 2>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.activePlayer : 1;
+    return shouldRestoreVsBot && savedVsBotMatch ? savedVsBotMatch.activePlayer : 1;
   });
   const [consecutiveMatches, setConsecutiveMatches] = useState<number>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.consecutiveMatches : 0;
+    return shouldRestoreVsBot && savedVsBotMatch ? savedVsBotMatch.consecutiveMatches : 0;
   });
 
-  // Reset landscape menu tab when mobile config menu is closed
+  // Reset landscape menu tab when mobile config menu is closed and sync pending config when opened
   useEffect(() => {
     if (!isMobileConfigOpen) {
       setLandscapeMenuTab("home");
+    } else {
+      setPendingDifficulty(difficulty);
+      setPendingMemoryMode(memoryMode);
     }
-  }, [isMobileConfigOpen]);
+  }, [isMobileConfigOpen, difficulty, memoryMode]);
 
   // --- VISUAL POLISH STATES (SHAKE, COMBO, PARTICLES) ---
-  const COMBO_DISPLAY_DURATION = 1000;
+  const COMBO_DISPLAY_DURATION = 1500;
   const [isShaking, setIsShaking] = useState<boolean>(false);
   const [comboCount, setComboCount] = useState<number>(0);
-  const [activeCombo, setActiveCombo] = useState<{
+  const [activeCombos, setActiveCombos] = useState<Array<{
     id: number;
     count: number;
     glow: string;
     text: string;
     label: string;
-  } | null>(null);
+    offsetX: number;
+    offsetY: number;
+  }>>([]);
   const [comboParticles, setComboParticles] = useState<Array<{ id: number; dx: number; dy: number; size: number; color: string; delay: number }>>([]);
+  const comboTimersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      comboTimersRef.current.forEach(t => clearTimeout(t));
+      comboTimersRef.current = [];
+    };
+  }, []);
 
   const triggerScreenShake = () => {
     // Disable heavy screen-shake visual effect on mobile/tablet touch devices to maintain a smooth 60 FPS profile
@@ -920,53 +1002,73 @@ export default function App() {
       glow = "shadow-red-500/70 border-red-500/60 bg-red-950/95 text-red-300";
       text = "from-red-500 to-amber-500";
     }
+
+    const isTouch = typeof window !== "undefined" && (("ontouchstart" in window) || navigator.maxTouchPoints > 0);
     
-    setActiveCombo({
-      id: Date.now(),
-      count,
-      glow,
-      text,
-      label
+    // Preset offsets for up to 3 simultaneous instances
+    const offsets = [
+      { x: 0, y: 0 },
+      { x: 40, y: -20 },
+      { x: -40, y: -40 }
+    ];
+
+    setActiveCombos(prev => {
+      // Retain max 2 previous items + 1 new = max 3 simultaneous instances
+      const capped = prev.slice(-2);
+      const nextOffset = offsets[capped.length % offsets.length];
+      
+      const newItem = {
+        id: Date.now() + Math.random(),
+        count,
+        glow,
+        text,
+        label,
+        offsetX: nextOffset.x,
+        offsetY: nextOffset.y,
+      };
+
+      const timerId = window.setTimeout(() => {
+        setActiveCombos(curr => curr.filter(item => item.id !== newItem.id));
+        comboTimersRef.current = comboTimersRef.current.filter(t => t !== timerId);
+      }, COMBO_DISPLAY_DURATION);
+
+      comboTimersRef.current.push(timerId);
+
+      return [...capped, newItem];
     });
 
     if (count >= 5) {
-      const newComboParticles = Array.from({ length: 15 }).map((_, i) => {
-        const angle = (i * 2 * Math.PI) / 15 + (Math.random() * 0.3 - 0.15);
-        const speed = 40 + Math.random() * 60;
+      const particleCount = isTouch ? 8 : 12; // Mobile safety cap
+      const newComboParticles = Array.from({ length: particleCount }).map((_, i) => {
+        const angle = (i * 2 * Math.PI) / particleCount + (Math.random() * 0.3 - 0.15);
+        const speed = 35 + Math.random() * 45;
         return {
-          id: i,
+          id: Date.now() + i,
           dx: Math.cos(angle) * speed,
           dy: Math.sin(angle) * speed,
-          size: 4 + Math.random() * 4,
+          size: 4 + Math.random() * 3,
           color: "#fbbf24", // Gold stars
           delay: Math.random() * 0.1,
         };
       });
       setComboParticles(newComboParticles);
-      setTimeout(() => {
+      const particleTimerId = window.setTimeout(() => {
         setComboParticles([]);
+        comboTimersRef.current = comboTimersRef.current.filter(t => t !== particleTimerId);
       }, COMBO_DISPLAY_DURATION);
+      comboTimersRef.current.push(particleTimerId);
     }
-
-    setTimeout(() => {
-      setActiveCombo(prev => prev && prev.count === count ? null : prev);
-    }, COMBO_DISPLAY_DURATION);
   };
 
   // --- BOT STATE ---
   const [currentBotDifficulty, setCurrentBotDifficulty] = useState<number>(() => {
-    return savedVsBotMatch ? savedVsBotMatch.currentBotDifficulty : 3;
+    return shouldRestoreVsBot && savedVsBotMatch ? savedVsBotMatch.currentBotDifficulty : 3;
   });
   const [botUsername, setBotUsername] = useState<string>(() => {
-    if (savedVsBotMatch && savedVsBotMatch.botUsername) {
+    if (shouldRestoreVsBot && savedVsBotMatch && savedVsBotMatch.botUsername) {
       return savedVsBotMatch.botUsername;
     }
-    const names = [
-      "RoboMatch", "PixelMind", "CyberBrain", "SpeedyAI", 
-      "SynapseX", "BinaryBrain", "AlphaMemory", "Algorhythm",
-      "NeuralLink", "SiliconSage", "DeepThink", "CortexBot"
-    ];
-    return names[Math.floor(Math.random() * names.length)];
+    return getNextBotUsername();
   });
   const [aiThinkingProgress, setAiThinkingProgress] = useState<number>(0);
   const botMemoryRef = useRef<BotMemoryManager | null>(null);
@@ -1017,6 +1119,30 @@ export default function App() {
       };
     }
   }, [activeTab, memoryMode, t]);
+
+  // Dynamic Help Config for Menu Panels matching the currently selected mode in the menu
+  const menuHelpConfig = useMemo(() => {
+    if (pendingMemoryMode === "solo") {
+      return {
+        title: t.soloTitle,
+        iconName: "SquareStack",
+        rules: t.soloRules,
+      };
+    } else if (pendingMemoryMode === "twoPlayers") {
+      return {
+        title: t.twoPlayersTitle,
+        iconName: "Users",
+        rules: t.twoPlayersRules,
+      };
+    } else {
+      // vsBot
+      return {
+        title: t.vsBotTitle,
+        iconName: "Bot",
+        rules: t.vsBotRules,
+      };
+    }
+  }, [pendingMemoryMode, t]);
 
   // --- HELPERS ---
   const shuffleArray = <T,>(arr: T[]): T[] => {
@@ -1086,7 +1212,11 @@ export default function App() {
   };
 
   // --- MEMORY GAME INITS ---
-  const generateMemoryGame = (diff: "3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8") => {
+  const generateMemoryGame = (
+    diff: "3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8" | "7x8",
+    targetMode?: string,
+    forceNewGame: boolean = false
+  ) => {
     setIsMenuDrawerOpen(false);
     if (!layoutConfig.showSidebar) {
       setIsSidebarCollapsed(true);
@@ -1094,14 +1224,42 @@ export default function App() {
     isRestoredRef.current = false;
     trophiesUpdatedRef.current = false;
     p2pWinsUpdatedRef.current = false;
-    setMatchSessionId(Date.now().toString());
-    if (memoryMode === "vsBot") {
+
+    const effectiveMode = targetMode || memoryMode;
+
+    if (effectiveMode === "vsBot") {
+      if (!forceNewGame) {
+        const saved = localStorage.getItem("emoji_brainpop_saved_vs_bot_match");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (
+              parsed &&
+              parsed.memoryCards &&
+              parsed.memoryCards.length > 0 &&
+              !parsed.memoryFinished
+            ) {
+              const totalPlayable = parsed.memoryCards.filter((c: string) => c !== "BLOCKED").length;
+              const matchedCount = new Set((parsed.memoryMatched || []).filter((idx: number) => parsed.memoryCards[idx] !== "BLOCKED")).size;
+              if (matchedCount < totalPlayable) {
+                if (memoryMode !== "vsBot") {
+                  setMemoryMode("vsBot");
+                }
+                restoreSavedVsBotMatch(parsed);
+                return;
+              }
+            }
+          } catch (e) {}
+        }
+      }
       localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
     }
+
+    setMatchSessionId(Date.now().toString());
     // Determine card dimensions
     let actualDiff = diff;
-    if (memoryMode === "twoPlayers") {
-      if (diff === "5x5" || diff === "5x6" || diff === "6x6" || diff === "6x8") {
+    if (effectiveMode === "twoPlayers") {
+      if (diff === "5x5" || diff === "6x6" || diff === "6x8" || diff === "7x8") {
         actualDiff = diff;
       } else {
         actualDiff = "5x5";
@@ -1112,7 +1270,7 @@ export default function App() {
       if (difficulty !== actualDiff) {
         setDifficulty(actualDiff);
       }
-    } else if (memoryMode === "vsBot") {
+    } else if (effectiveMode === "vsBot") {
       actualDiff = getBoardSizeForTrophies(vsBotTrophies);
       if (difficulty !== actualDiff) {
         setDifficulty(actualDiff);
@@ -1126,15 +1284,31 @@ export default function App() {
       }
     }
 
-    const { randomizedBoard, selectedEmojis } = generateMemoryBoard(actualDiff, memoryMode);
+    if (memoryMode !== effectiveMode) {
+      setMemoryMode(effectiveMode as any);
+    }
+
+    setPendingDifficulty(actualDiff);
+    setPendingMemoryMode(effectiveMode);
+
+    const { randomizedBoard, selectedEmojis } = generateMemoryBoard(actualDiff, effectiveMode as any);
+
+    lastGeneratedConfigRef.current = { diff: actualDiff, mode: effectiveMode };
 
     setMemoryCards(randomizedBoard);
     setMemoryMatched([]);
     setMatchedByP1([]);
     setMemoryFlipped([]);
+    setMemoryMismatch([]);
     setMemoryMoves(0);
     setMemoryFinished(false);
     setMemoryBusy(false);
+    isClickProcessingRef.current = false;
+    pendingFlippedRef.current = [];
+    if (botThinkingTimerRef.current) {
+      clearTimeout(botThinkingTimerRef.current);
+      botThinkingTimerRef.current = null;
+    }
     setIsPaused(false);
     if (localStorage.getItem("emoji_brainpop_demo_played") !== "true") {
       demoHasStartedRef.current = false;
@@ -1144,7 +1318,9 @@ export default function App() {
     setFadeCelebrationOut(false);
     setShowScoreSummary(false);
     setComboCount(0);
-    setActiveCombo(null);
+    setActiveCombos([]);
+    comboTimersRef.current.forEach(t => clearTimeout(t));
+    comboTimersRef.current = [];
     setComboParticles([]);
     setClassicAdWatched(false);
     setChallengeAdWatched(false);
@@ -1152,26 +1328,20 @@ export default function App() {
 
     adManager.gameplayStart();
 
-    if (memoryMode === "twoPlayers" || memoryMode === "vsBot") {
+    if (effectiveMode === "twoPlayers" || effectiveMode === "vsBot") {
       setP1Score(0);
       setP2Score(0);
       setActivePlayer(1);
       setConsecutiveMatches(0);
     }
 
-    if (memoryMode === "vsBot") {
+    if (effectiveMode === "vsBot") {
       const bDiff = selectBotDifficultyForTrophies(vsBotTrophies);
       setCurrentBotDifficulty(bDiff);
       botMemoryRef.current = new BotMemoryManager(bDiff);
       lastHumanRevealedRef.current = [];
       
-      const names = [
-        "RoboMatch", "PixelMind", "CyberBrain", "SpeedyAI", 
-        "SynapseX", "BinaryBrain", "AlphaMemory", "Algorhythm",
-        "NeuralLink", "SiliconSage", "DeepThink", "CortexBot"
-      ];
-      const randomName = names[Math.floor(Math.random() * names.length)];
-      setBotUsername(randomName);
+      setBotUsername(getNextBotUsername());
       setAiThinkingProgress(0);
     } else {
       botMemoryRef.current = null;
@@ -1202,24 +1372,20 @@ export default function App() {
         case "5x6": return 180;
         case "6x6": return 240;
         case "6x8": return 300;
+        case "7x8": return 360;
         default: return 120;
       }
     };
     setMemoryTimeLeft(getInitialTime());
     setMemoryTimerActive(true);
 
-    if (typeof window !== "undefined") {
-      setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-      setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
-      setTimeout(() => window.dispatchEvent(new Event("resize")), 150);
-      setTimeout(() => window.dispatchEvent(new Event("resize")), 300);
-    }
+    calculateSizing(actualDiff);
   };
 
   // Tick memory timer (Non-blocking: continues ticking past zero into negative values)
   useEffect(() => {
     let intervalId: any = null;
-    if (memoryTimerActive && !memoryFinished && activeTab === "memory" && !isPaused) {
+    if (memoryTimerActive && !memoryFinished && activeTab === "memory" && !isPaused && !isMobileConfigOpen) {
       intervalId = setInterval(() => {
         setMemoryTimeLeft(prev => prev - 1);
       }, 1000);
@@ -1227,7 +1393,7 @@ export default function App() {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [memoryTimerActive, memoryFinished, activeTab, isPaused]);
+  }, [memoryTimerActive, memoryFinished, activeTab, isPaused, isMobileConfigOpen]);
 
   // Sync generators with selections
   useEffect(() => {
@@ -1248,6 +1414,7 @@ export default function App() {
       else if (savedState.memoryCards.length === 30) restoredDiff = "5x6";
       else if (savedState.memoryCards.length === 36) restoredDiff = "6x6";
       else if (savedState.memoryCards.length === 48) restoredDiff = "6x8";
+      else if (savedState.memoryCards.length === 56) restoredDiff = "7x8";
     }
     setDifficulty(restoredDiff);
     if (savedState.matchSessionId) {
@@ -1256,7 +1423,8 @@ export default function App() {
     setMemoryCards(savedState.memoryCards);
     setMemoryMatched(savedState.memoryMatched);
     setMatchedByP1(savedState.matchedByP1 || []);
-    setMemoryFlipped(savedState.memoryFlipped);
+    // Safety: ensure saved matches resume with cards face down if restored mid-flip
+    setMemoryFlipped(savedState.memoryFlipped && savedState.memoryFlipped.length < 2 ? savedState.memoryFlipped : []);
     setMemoryMoves(savedState.memoryMoves);
     setMemoryFinished(savedState.memoryFinished);
     setP1Score(savedState.p1Score);
@@ -1282,11 +1450,54 @@ export default function App() {
     setShowScoreSummary(false);
     trophiesUpdatedRef.current = false;
     p2pWinsUpdatedRef.current = false;
+
+    calculateSizing(restoredDiff);
+  };
+
+  const applyPendingConfigurationAndStartOrResume = () => {
+    let targetDiff = pendingDifficulty;
+    if (pendingMemoryMode === "vsBot") {
+      targetDiff = getBoardSizeForTrophies(vsBotTrophies);
+    } else if (pendingMemoryMode === "twoPlayers") {
+      if (targetDiff !== "5x5" && targetDiff !== "6x6" && targetDiff !== "6x8" && targetDiff !== "7x8") {
+        targetDiff = "5x5";
+      }
+      if (!isBoardSizeUnlocked(targetDiff, "twoPlayers")) {
+        targetDiff = "5x5";
+      }
+    } else {
+      if (!isBoardSizeUnlocked(targetDiff, "solo")) {
+        targetDiff = "3x4";
+      }
+    }
+
+    const configChanged =
+      difficulty !== targetDiff ||
+      memoryMode !== pendingMemoryMode ||
+      memoryCards.length === 0;
+
+    setMemoryMode(pendingMemoryMode);
+    setDifficulty(targetDiff);
+    setPendingDifficulty(targetDiff);
+
+    setIsMobileConfigOpen(false);
+    setIsPaused(false);
+
+    if (configChanged) {
+      generateMemoryGame(targetDiff as any, pendingMemoryMode);
+    } else {
+      calculateSizing(targetDiff);
+    }
+  };
+
+  const ensureGameGenerated = () => {
+    applyPendingConfigurationAndStartOrResume();
   };
 
   useEffect(() => {
     if (isRestoredRef.current) {
       isRestoredRef.current = false;
+      calculateSizing();
       return;
     }
 
@@ -1296,20 +1507,26 @@ export default function App() {
         try {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.memoryCards && parsed.memoryCards.length > 0 && !parsed.memoryFinished) {
-            // Already restored by useState initializer or explicit action, don't auto-regenerate.
+            calculateSizing();
             return;
           }
         } catch (e) {}
       }
     }
 
-    generateMemoryGame(difficulty);
-  }, [difficulty, memoryMode]);
+    if (memoryCards.length === 0) {
+      generateMemoryGame(difficulty);
+    } else {
+      calculateSizing(difficulty);
+    }
+  }, []);
 
   useEffect(() => {
     if (activeTab === "memory") {
       if (memoryCards.length === 0) {
         generateMemoryGame(difficulty);
+      } else {
+        calculateSizing(difficulty);
       }
     }
   }, [activeTab]);
@@ -1348,7 +1565,18 @@ export default function App() {
     }
   }, [memoryFlipped, tutorialStep, tutorialCardA]);
 
-  // Complete guided tutorial when Card A and Card B match
+  // Watchdog Safety Net: Auto-reset memoryBusy and processing lock if left stuck by interrupted animations/timers
+  useEffect(() => {
+    if (!memoryBusy && !isClickProcessingRef.current) return;
+    const timeout = setTimeout(() => {
+      setMemoryBusy(false);
+      isClickProcessingRef.current = false;
+      if (memoryFlipped.length >= 2) {
+        setMemoryFlipped([]);
+      }
+    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [memoryBusy, memoryFlipped.length]);
   useEffect(() => {
     if (tutorialStep === 2 && (memoryMatched.includes(tutorialCardA) || memoryMatched.includes(tutorialCardB))) {
       setTutorialStep(0);
@@ -1356,28 +1584,78 @@ export default function App() {
     }
   }, [memoryMatched, tutorialStep, tutorialCardA, tutorialCardB]);
 
+  // Reactive Safety Net: guarantees game completion whenever all playable cards on board are matched
   useEffect(() => {
-    if (savedVsBotMatch) {
+    if (activeTab !== "memory" || memoryFinished || memoryCards.length === 0) return;
+
+    const totalPlayableCards = memoryCards.filter(c => c !== "BLOCKED").length;
+    if (totalPlayableCards === 0) return;
+
+    const uniqueMatchedCount = new Set(memoryMatched.filter(idx => memoryCards[idx] !== "BLOCKED")).size;
+
+    if (uniqueMatchedCount >= totalPlayableCards) {
+      const timer = setTimeout(() => {
+        if (!memoryFinished) {
+          if (memoryMode === "solo") {
+            const basePoints = Math.round((memoryCards.length * 1) / 2);
+            const timeBonus = Math.round((memoryTimeLeft > 0 ? memoryTimeLeft * 2 : 0) / 5);
+            const flipEfficiencyBonus = Math.round(Math.max(0, 1000 - memoryMoves * 10) / 100);
+            const rawScore = basePoints + timeBonus + flipEfficiencyBonus;
+
+            const prevGames = parseInt(localStorage.getItem("emoji_brainpop_classic_games_completed") || "0", 10);
+            const newGamesCount = prevGames + 1;
+            localStorage.setItem("emoji_brainpop_classic_games_completed", newGamesCount.toString());
+            setClassicGamesCompleted(newGamesCount);
+
+            setMemoryFlipState(prev => {
+              const newScore = prev.score + rawScore;
+              const updated = {
+                ...prev,
+                score: newScore,
+                highScore: Math.max(prev.highScore, rawScore)
+              };
+              localStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
+              return updated;
+            });
+            synth.playVictory();
+          }
+          setMemoryFinished(true);
+          adManager.gameplayStop();
+          setShowScoreSummary(true);
+          setShowVictoryCelebration(false);
+          setMemoryBusy(false);
+          isClickProcessingRef.current = false;
+          localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+        }
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, memoryFinished, memoryCards, memoryMatched, memoryMode, memoryTimeLeft, memoryMoves]);
+
+  useEffect(() => {
+    if (shouldRestoreVsBot && savedVsBotMatch) {
       const manager = new BotMemoryManager(savedVsBotMatch.currentBotDifficulty);
       manager.restoreMemory(savedVsBotMatch.botMemory || []);
       botMemoryRef.current = manager;
       lastHumanRevealedRef.current = savedVsBotMatch.lastHumanRevealed || [];
     }
-  }, []);
+  }, [shouldRestoreVsBot]);
 
   // Automatically save VS BOT match state on any change
   useEffect(() => {
-    const targetPairsToWin = difficulty === "5x5" ? 7 : difficulty === "6x6" ? 10 : 8;
+    const targetPairsToWin = getTargetPairsToWin(difficulty, memoryCards.length);
+    const totalPlayableCards = memoryCards.filter(c => c !== "BLOCKED").length;
+    const uniqueMatchedCount = new Set(memoryMatched.filter(idx => memoryCards[idx] !== "BLOCKED")).size;
     const isCompleted = memoryCards.length > 0 && (
-      memoryMatched.length === (memoryCards.includes("BLOCKED") ? memoryCards.length - 1 : memoryCards.length) ||
-      (memoryMode !== "vsBot" && (p1Score >= targetPairsToWin || p2Score >= targetPairsToWin))
+      (totalPlayableCards > 0 && uniqueMatchedCount >= totalPlayableCards) ||
+      (memoryMode === "twoPlayers" && (p1Score >= targetPairsToWin || p2Score >= targetPairsToWin))
     );
 
     if (memoryMode === "vsBot" && !memoryFinished && !isCompleted && memoryCards.length > 0) {
       const stateToSave = {
         memoryCards,
         memoryMatched,
-        memoryFlipped,
+        memoryFlipped: memoryFlipped.length < 2 ? memoryFlipped : [], // Always store clean flip state to prevent lock on reload
         memoryMoves,
         memoryFinished,
         p1Score,
@@ -1456,18 +1734,32 @@ export default function App() {
     setIsWatchingAd(true);
     synth.playSelect();
 
+    let handled = false;
+    const cleanupAndSuccess = () => {
+      if (handled) return;
+      handled = true;
+      setIsWatchingAd(false);
+      onSuccess();
+    };
+
+    // Safety timeout: if ad SDK hangs or blocks on mobile, resolve after 35s
+    const adTimeout = setTimeout(() => {
+      cleanupAndSuccess();
+    }, 35000);
+
     adManager.showRewardedAd()
       .then((withReward: boolean) => {
-        setIsWatchingAd(false);
+        clearTimeout(adTimeout);
         if (withReward) {
-          onSuccess();
+          cleanupAndSuccess();
+        } else {
+          setIsWatchingAd(false);
         }
       })
       .catch((err: any) => {
-        setIsWatchingAd(false);
+        clearTimeout(adTimeout);
         console.warn("Rewarded ad error:", err);
-        // Fallback to grant reward in dev / unblocked testing environments
-        onSuccess();
+        cleanupAndSuccess();
       });
   };
 
@@ -1532,7 +1824,7 @@ export default function App() {
 
   // Track AI thinking progress for visual bar in real-time
   useEffect(() => {
-    if (memoryMode !== "vsBot" || activePlayer !== 2 || memoryFinished || memoryBusy) {
+    if (memoryMode !== "vsBot" || activePlayer !== 2 || memoryFinished || memoryBusy || isPaused || isMobileConfigOpen) {
       setAiThinkingProgress(0);
       return;
     }
@@ -1569,15 +1861,20 @@ export default function App() {
 
   // Trigger BOT turn automatically in VS BOT mode
   useEffect(() => {
-    if (memoryMode !== "vsBot" || activePlayer !== 2 || memoryFinished || memoryBusy) {
+    if (memoryMode !== "vsBot" || activePlayer !== 2 || memoryFinished || memoryBusy || isPaused || isMobileConfigOpen) {
+      if (botThinkingTimerRef.current) {
+        clearTimeout(botThinkingTimerRef.current);
+        botThinkingTimerRef.current = null;
+      }
       return;
     }
 
     const config = getBotConfig(currentBotDifficulty);
     const thinkingTimeout = setTimeout(() => {
-      if (memoryFinished || activePlayer !== 2) return;
+      botThinkingTimerRef.current = null;
+      if (memoryFinished || activePlayer !== 2 || isPaused || isMobileConfigOpen) return;
 
-      const decision = BotDecisionEngine.decideNextFlip({
+      let decision = BotDecisionEngine.decideNextFlip({
         cards: memoryCards,
         matchedIndices: memoryMatched,
         flippedIndices: memoryFlipped,
@@ -1585,17 +1882,36 @@ export default function App() {
         lastHumanRevealed: lastHumanRevealedRef.current,
       });
 
+      if (decision === -1) {
+        // Fallback: choose any valid unrevealed and unmatched card
+        const available = memoryCards
+          .map((c, i) => i)
+          .filter(i => memoryCards[i] !== "BLOCKED" && !memoryMatched.includes(i) && !memoryFlipped.includes(i));
+        if (available.length > 0) {
+          decision = available[Math.floor(Math.random() * available.length)];
+        }
+      }
+
       if (decision !== -1) {
-        handleMemoryCardClick(decision, true);
+        handleMemoryCardClickRef.current(decision, true);
       }
     }, config.thinkingTimeMs);
 
-    return () => clearTimeout(thinkingTimeout);
+    botThinkingTimerRef.current = thinkingTimeout;
+
+    return () => {
+      clearTimeout(thinkingTimeout);
+      if (botThinkingTimerRef.current === thinkingTimeout) {
+        botThinkingTimerRef.current = null;
+      }
+    };
   }, [
     memoryMode,
     activePlayer,
     memoryFinished,
     memoryBusy,
+    isPaused,
+    isMobileConfigOpen,
     memoryFlipped,
     memoryCards,
     memoryMatched,
@@ -1726,13 +2042,16 @@ export default function App() {
   };
 
   useLayoutEffect(() => {
-    updateLineCoordinates();
-    const timer = setTimeout(updateLineCoordinates, 120);
-    return () => clearTimeout(timer);
+    if (activeTab === "connect") {
+      updateLineCoordinates();
+      const timer = setTimeout(updateLineCoordinates, 120);
+      return () => clearTimeout(timer);
+    }
   }, [connections, leftCards, rightCards, checked, activeTab]);
 
   useEffect(() => {
-    // Create ResizeObserver to monitor container element sizing
+    if (activeTab !== "connect") return;
+
     let resizeObserver: ResizeObserver | null = null;
     if (containerRef.current) {
       resizeObserver = new ResizeObserver(() => {
@@ -1741,23 +2060,12 @@ export default function App() {
       resizeObserver.observe(containerRef.current);
     }
 
-    const handleResize = () => {
-      updateLineCoordinates();
-      // Extra safety redraw after layout stabilizes
-      setTimeout(updateLineCoordinates, 100);
-    };
-
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-    
     return () => {
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
     };
-  }, [connections, leftCards, rightCards, checked, activeTab]);
+  }, [activeTab]);
 
   // Helper to find the card index under a client point
   const getCardIndexAtPoint = (clientX: number, clientY: number): number | null => {
@@ -1975,11 +2283,44 @@ export default function App() {
   };
 
   const handleBackToMenu = () => {
-    synth.playSelect();
-    setMemoryFinished(false);
-    if (memoryMode === "vsBot") {
-      localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+    try {
+      synth?.playSelect?.();
+    } catch (e) {
+      console.warn("Audio error:", e);
     }
+    setMemoryFinished(false);
+    setShowScoreSummary(false);
+    setShowVictoryCelebration(false);
+    setFadeCelebrationOut(false);
+    setMemoryBusy(false);
+    isClickProcessingRef.current = false;
+    pendingFlippedRef.current = [];
+    if (botThinkingTimerRef.current) {
+      clearTimeout(botThinkingTimerRef.current);
+      botThinkingTimerRef.current = null;
+    }
+    setIsWatchingAd(false);
+    localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+
+    // Reset game board state to prevent auto-completion re-triggering end-game panel
+    setMemoryMatched([]);
+    setMatchedByP1([]);
+    setMemoryFlipped([]);
+    setMemoryMismatch([]);
+    setMemoryMoves(0);
+    setP1Score(0);
+    setP2Score(0);
+    setComboCount(0);
+    setActiveCombos([]);
+
+    // Generate fresh memory game for current difficulty
+    generateMemoryGame(difficulty);
+
+    // Open mobile menu panel overlay if on mobile/portrait layout
+    if (layoutConfig.allowMobileConfigMenu) {
+      setIsMobileConfigOpen(true);
+    }
+
     setActiveTab("memory");
   };
 
@@ -1989,14 +2330,16 @@ export default function App() {
   };
 
   // --- TAB 2: MEMORY GAME CLICK LOGIC ---
-  const handleMemoryMatchReward = (newMatchedLength: number, currentMoves: number, isCombo: boolean) => {
-    const isCompleted = newMatchedLength === (memoryCards.includes("BLOCKED") ? memoryCards.length - 1 : memoryCards.length);
+  const handleMemoryMatchReward = (newMatchedIndices: number[], currentMoves: number, isCombo: boolean) => {
+    const totalPlayableCards = memoryCards.filter(c => c !== "BLOCKED").length;
+    const uniqueMatchedCount = new Set(newMatchedIndices.filter(idx => memoryCards[idx] !== "BLOCKED")).size;
+    const isCompleted = totalPlayableCards > 0 && uniqueMatchedCount >= totalPlayableCards;
 
     const applyRewards = () => {
-      const basePoints = (memoryCards.length * 10) / 2;
-      const timeBonus = (memoryTimeLeft > 0 ? memoryTimeLeft * 20 : 0) / 5;
-      const flipEfficiencyBonus = Math.max(0, 1000 - currentMoves * 10) / 10;
-      const rawScore = Math.round(basePoints + timeBonus + flipEfficiencyBonus);
+      const basePoints = Math.round((memoryCards.length * 1) / 2);
+      const timeBonus = Math.round((memoryTimeLeft > 0 ? memoryTimeLeft * 2 : 0) / 5);
+      const flipEfficiencyBonus = Math.round(Math.max(0, 1000 - currentMoves * 10) / 100);
+      const rawScore = basePoints + timeBonus + flipEfficiencyBonus;
       const potentialScore = rawScore * 2;
 
       const isSolo = memoryMode === "solo";
@@ -2004,6 +2347,7 @@ export default function App() {
       const isPotentialNewHigh = isSolo && potentialScore > currentHighScore;
 
       if (isCompleted) {
+        let gentleSnowUnlockedThisGame = false;
         if (isSolo) {
           const prevGames = parseInt(localStorage.getItem("emoji_brainpop_classic_games_completed") || "0", 10);
           const newGamesCount = prevGames + 1;
@@ -2016,7 +2360,7 @@ export default function App() {
           if (newGamesCount >= 3 && !isSnowOwned && !alreadyNotified) {
             unlockItem("effect_snow");
             localStorage.setItem("emoji_brainpop_gentle_snow_unlocked_notified", "true");
-            setShowGentleSnowModal(true);
+            gentleSnowUnlockedThisGame = true;
           }
 
           setMemoryFlipState(prev => {
@@ -2035,17 +2379,24 @@ export default function App() {
         adManager.gameplayStop();
         setShowScoreSummary(true);
         setShowVictoryCelebration(false);
+        localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
 
         if (isPotentialNewHigh) {
           synth.playHighScore();
           setNewHighScoreValue(potentialScore);
           setShowHighScorePopup(true);
           triggerScreenShake();
+          if (gentleSnowUnlockedThisGame) {
+            setHasPendingGentleSnow(true);
+          }
+        } else if (gentleSnowUnlockedThisGame) {
+          setShowGentleSnowModal(true);
         } else {
           synth.playVictory();
         }
       }
       setMemoryBusy(false);
+      isClickProcessingRef.current = false;
     };
 
     if (isCombo) {
@@ -2066,39 +2417,59 @@ export default function App() {
     When flipping the 4th, the 3rd flips back down, and so on.
   */
   const handleMemoryCardClick = (clickedIdx: number, isBotAction: boolean = false, isDemoAction: boolean = false) => {
-    if (isPaused) return;
+    if (isPaused || isMobileConfigOpen) return;
     if (memoryFinished) return;
+    if (isClickProcessingRef.current && !isDemoAction) return; // Prevent double-click race conditions
     if (memoryCards[clickedIdx] === "BLOCKED") return; // Blocked card can't be clicked or flipped
     if (memoryBusy && !isDemoAction) return; // Block clicks during auto-flip delay
     if (memoryMatched.includes(clickedIdx)) return; // Already matched
-    if (memoryFlipped.includes(clickedIdx)) return; // Already flipped state
-    
+    if (memoryFlipped.includes(clickedIdx) || pendingFlippedRef.current.includes(clickedIdx)) return; // Already flipped or pending
+    if (pendingFlippedRef.current.length >= 2 && !isDemoAction) return; // Rapid multi-touch guard
+
     // Guided tutorial restrictions: only allow clicking the target card during tutorial steps
     if (tutorialStep === 1 && clickedIdx !== tutorialCardA) return;
     if (tutorialStep === 2 && clickedIdx !== tutorialCardB) return;
 
     if (memoryMode === "vsBot" && activePlayer === 2 && !isBotAction) return; // Block player clicks during BOT turn
 
-    if (memoryMode === "twoPlayers" || memoryMode === "vsBot") {
-      synth.playSelect();
-      setMemoryMoves(prev => prev + 1);
+    // Determine current active flipped list from pendingFlippedRef or memoryFlipped fallback
+    const currentFlipped = pendingFlippedRef.current.length > 0 ? [...pendingFlippedRef.current] : [...memoryFlipped];
 
-      const currentFlipped = [...memoryFlipped];
+    if (currentFlipped.length >= 2 && !isDemoAction) return; // Safety guard: pair already active
 
-      if (currentFlipped.length === 0) {
-        // First card flipped
-        setMemoryFlipped([clickedIdx]);
+    if (currentFlipped.length === 0) {
+      // First card flipped
+      pendingFlippedRef.current = [clickedIdx];
+      setMemoryFlipped([clickedIdx]);
+
+      if (memoryMode === "twoPlayers" || memoryMode === "vsBot") {
+        synth.playSelect();
+        setMemoryMoves(prev => prev + 1);
         if (memoryMode === "vsBot") {
           botMemoryRef.current?.recordReveal(memoryCards[clickedIdx], clickedIdx);
           if (activePlayer === 1) {
             lastHumanRevealedRef.current = [clickedIdx];
           }
         }
-      } else if (currentFlipped.length === 1) {
-        // Second card flipped
-        const firstIdx = currentFlipped[0];
-        setMemoryFlipped([firstIdx, clickedIdx]);
-        setMemoryBusy(true);
+      } else {
+        // Solo mode
+        synth.playSelect();
+        setMemoryMoves(prev => prev + 1);
+      }
+    } else if (currentFlipped.length === 1) {
+      const firstIdx = currentFlipped[0];
+      if (firstIdx === clickedIdx) return; // Strict guard: never allow card to match itself
+
+      // Second card flipped
+      pendingFlippedRef.current = [firstIdx, clickedIdx];
+      setMemoryFlipped([firstIdx, clickedIdx]);
+      setMemoryBusy(true);
+      isClickProcessingRef.current = true;
+
+      if (memoryMode === "twoPlayers" || memoryMode === "vsBot") {
+        synth.playSelect();
+        setMemoryMoves(prev => prev + 1);
+
         if (memoryMode === "vsBot") {
           botMemoryRef.current?.recordReveal(memoryCards[clickedIdx], clickedIdx);
           if (activePlayer === 1) {
@@ -2106,10 +2477,11 @@ export default function App() {
           }
         }
 
-        const matchFound = memoryCards[firstIdx] === memoryCards[clickedIdx];
+        // Wait 500ms until both cards have fully completed their flip-open animation
+        setTimeout(() => {
+          const matchFound = (firstIdx !== clickedIdx) && (memoryCards[firstIdx] === memoryCards[clickedIdx]);
 
-        if (matchFound) {
-          setTimeout(() => {
+          if (matchFound) {
             const nextConsecutive = consecutiveMatches + 1;
             const isCombo = nextConsecutive >= 2;
 
@@ -2118,13 +2490,13 @@ export default function App() {
             } else {
               synth.playSuccess();
             }
-            triggerScreenShake();
-            const newMatched = [...memoryMatched, firstIdx, clickedIdx];
+            const newMatched = Array.from(new Set([...memoryMatched, firstIdx, clickedIdx]));
             setMemoryMatched(newMatched);
             if (activePlayer === 1) {
-              setMatchedByP1(prev => [...prev, firstIdx, clickedIdx]);
+              setMatchedByP1(prev => Array.from(new Set([...prev, firstIdx, clickedIdx])));
             }
             setMemoryFlipped([]);
+            pendingFlippedRef.current = [];
             if (memoryMode === "vsBot") {
               botMemoryRef.current?.forgetPositions([firstIdx, clickedIdx]);
             }
@@ -2138,19 +2510,19 @@ export default function App() {
             let currentP2Score = p2Score;
             if (activePlayer === 1) {
               currentP1Score = p1Score + 1;
-              setP1Score(currentP1Score);
+              setP1Score(prev => prev + 1);
             } else {
               currentP2Score = p2Score + 1;
-              setP2Score(currentP2Score);
+              setP2Score(prev => prev + 1);
             }
 
-            const targetPairsToWin = difficulty === "5x5" ? 7 : difficulty === "6x6" ? 10 : 8;
-            const eitherReachedTarget = currentP1Score >= targetPairsToWin || currentP2Score >= targetPairsToWin;
-            const isCompleted = newMatched.length === (memoryCards.includes("BLOCKED") ? memoryCards.length - 1 : memoryCards.length);
+            const targetPairsToWin = getTargetPairsToWin(difficulty, memoryCards.length);
+            const eitherReachedTarget = memoryMode === "twoPlayers" && (currentP1Score >= targetPairsToWin || currentP2Score >= targetPairsToWin);
+            const totalPlayableCards = memoryCards.filter(c => c !== "BLOCKED").length;
+            const uniqueMatchedCount = new Set(newMatched.filter(idx => memoryCards[idx] !== "BLOCKED")).size;
+            const isCompleted = totalPlayableCards > 0 && uniqueMatchedCount >= totalPlayableCards;
 
-            const shouldEnd = memoryMode === "vsBot"
-              ? isCompleted
-              : (eitherReachedTarget || isCompleted);
+            const shouldEnd = eitherReachedTarget || isCompleted;
 
             const resolveTurn = () => {
               if (shouldEnd) {
@@ -2158,16 +2530,20 @@ export default function App() {
                 adManager.gameplayStop();
                 setShowScoreSummary(true);
                 setShowVictoryCelebration(false);
+                localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
               } else {
                 // Consecutive successful turns limited to max 3
                 if (nextConsecutive >= 3) {
                   setActivePlayer(activePlayer === 1 ? 2 : 1);
                   setConsecutiveMatches(0);
+                  setMemoryFlipped([]);
+                  pendingFlippedRef.current = [];
                 } else {
                   setConsecutiveMatches(nextConsecutive);
                 }
               }
               setMemoryBusy(false);
+              isClickProcessingRef.current = false;
             };
 
             if (isCombo) {
@@ -2177,67 +2553,72 @@ export default function App() {
             } else {
               resolveTurn();
             }
-          }, 600); // Small feedback delay
-        } else {
-          // No match! Keep face-up for 1 second as required
-          setTimeout(() => {
-            setMemoryFlipped([]);
-            setActivePlayer(activePlayer === 1 ? 2 : 1);
-            setConsecutiveMatches(0);
-            setMemoryBusy(false);
-          }, 1000);
-        }
-      }
-      return;
-    }
-
-    synth.playSelect();
-    setMemoryMoves(prev => prev + 1);
-
-    const currentFlipped = [...memoryFlipped];
-
-    if (currentFlipped.length === 0) {
-      // First card flipped in the current sequence
-      setMemoryFlipped([clickedIdx]);
-    } 
-    else if (currentFlipped.length === 1) {
-      // Second card flipped, let's verify if they match!
-      const firstIdx = currentFlipped[0];
-      const matchFound = memoryCards[firstIdx] === memoryCards[clickedIdx];
-
-      if (matchFound) {
-        setMemoryBusy(true);
-        // Correct pair! Keep them permanently face-up
-        const nextCombo = comboCount + 1;
-        setComboCount(nextCombo);
-        const isCombo = nextCombo >= 2;
-        if (isCombo) {
-          synth.playCombo(nextCombo);
-        } else {
-          synth.playSuccess();
-        }
-        triggerScreenShake();
-        if (isCombo) {
-          triggerComboNotification(nextCombo);
-        }
-
-        const newMatched = [...memoryMatched, firstIdx, clickedIdx];
-        setMemoryMatched(newMatched);
-        setMatchedByP1(prev => [...prev, firstIdx, clickedIdx]);
-        setMemoryFlipped([]); // Clear current unresolved active flip list
-
-        handleMemoryMatchReward(newMatched.length, memoryMoves + 1, isCombo);
+          } else {
+            // No match! Play light shake effect on the revealed cards, then flip back face-down
+            setMemoryMismatch([firstIdx, clickedIdx]);
+            setTimeout(() => {
+              setMemoryMismatch([]);
+              setMemoryFlipped([]);
+              pendingFlippedRef.current = [];
+              setActivePlayer(activePlayer === 1 ? 2 : 1);
+              setConsecutiveMatches(0);
+              setMemoryBusy(false);
+              isClickProcessingRef.current = false;
+            }, 400);
+          }
+        }, 500);
       } else {
-        // No match! Show both cards face-up briefly, then flip both face-down after a short delay
-        setComboCount(0);
-        setMemoryFlipped([firstIdx, clickedIdx]);
-        setMemoryBusy(true);
+        // Solo mode
+        synth.playSelect();
+        setMemoryMoves(prev => prev + 1);
 
         setTimeout(() => {
-          setMemoryFlipped([]);
-          setMemoryBusy(false);
-        }, 800);
+          const matchFound = (firstIdx !== clickedIdx) && (memoryCards[firstIdx] === memoryCards[clickedIdx]);
+
+          if (matchFound) {
+            // Correct pair! Keep them permanently face-up
+            const nextCombo = comboCount + 1;
+            setComboCount(nextCombo);
+            const isCombo = nextCombo >= 2;
+            if (isCombo) {
+              synth.playCombo(nextCombo);
+            } else {
+              synth.playSuccess();
+            }
+            if (isCombo) {
+              triggerComboNotification(nextCombo);
+            }
+
+            const newMatched = Array.from(new Set([...memoryMatched, firstIdx, clickedIdx]));
+            setMemoryMatched(newMatched);
+            setMatchedByP1(prev => Array.from(new Set([...prev, firstIdx, clickedIdx])));
+            setMemoryFlipped([]); // Clear current unresolved active flip list
+            pendingFlippedRef.current = [];
+
+            handleMemoryMatchReward(newMatched, memoryMoves + 1, isCombo);
+            setMemoryBusy(false);
+            isClickProcessingRef.current = false;
+          } else {
+            // No match! Play a light shake effect on the fully revealed face-up cards, then flip face-down
+            setComboCount(0);
+            setMemoryMismatch([firstIdx, clickedIdx]);
+
+            setTimeout(() => {
+              setMemoryMismatch([]);
+              setMemoryFlipped([]);
+              pendingFlippedRef.current = [];
+              setMemoryBusy(false);
+              isClickProcessingRef.current = false;
+            }, 400);
+          }
+        }, 500);
       }
+    } else {
+      // Fallback for unexpected state: reset flipped list to just the newly clicked card
+      setMemoryFlipped([clickedIdx]);
+      pendingFlippedRef.current = [clickedIdx];
+      setMemoryBusy(false);
+      isClickProcessingRef.current = false;
     }
   };
 
@@ -2256,7 +2637,7 @@ export default function App() {
 
   const executeHint = () => {
     if (memoryMode !== "solo") return;
-    if (memoryFinished || isPaused || memoryCards.length === 0 || memoryBusy) return;
+    if (memoryFinished || isPaused || isMobileConfigOpen || memoryCards.length === 0 || memoryBusy) return;
     if (hintsCount <= 0) return;
 
     // Find all unmatched indices
@@ -2293,16 +2674,17 @@ export default function App() {
     // Automatically reveal matching pair, then complete the match
     setMemoryFlipped([idx1, idx2]);
     setMemoryBusy(true);
+    isClickProcessingRef.current = true;
 
     setTimeout(() => {
-      const newMatched = [...memoryMatched, idx1, idx2];
+      const newMatched = Array.from(new Set([...memoryMatched, idx1, idx2]));
       setMemoryMatched(newMatched);
-      setMatchedByP1(prev => [...prev, idx1, idx2]);
+      setMatchedByP1(prev => Array.from(new Set([...prev, idx1, idx2])));
       setMemoryFlipped([]);
       setMemoryBusy(false);
+      isClickProcessingRef.current = false;
       synth.playSuccess();
-      triggerScreenShake();
-      handleMemoryMatchReward(newMatched.length, memoryMoves + 1, false);
+      handleMemoryMatchReward(newMatched, memoryMoves + 1, false);
     }, 600);
   };
 
@@ -2311,11 +2693,11 @@ export default function App() {
   const renderMobileLandscapeMenu = () => {
     return (
       <MobileLandscapeMenu
-        memoryMode={memoryMode}
+        memoryMode={pendingMemoryMode}
         vsBotTrophies={vsBotTrophies}
         currentScore={currentScore}
         currentHighScore={currentHighScore}
-        difficulty={difficulty}
+        difficulty={pendingDifficulty}
         t={t}
         synth={synth}
         setIsShopOpen={setIsShopOpen}
@@ -2323,9 +2705,10 @@ export default function App() {
         setIsMobileConfigOpen={setIsMobileConfigOpen}
         setIsPaused={setIsPaused}
         getBoardSizeForTrophies={getBoardSizeForTrophies}
-        setDifficulty={setDifficulty}
-        setMemoryMode={setMemoryMode}
+        setDifficulty={setPendingDifficulty}
+        setMemoryMode={setPendingMemoryMode}
         generateMemoryGame={generateMemoryGame}
+        ensureGameGenerated={applyPendingConfigurationAndStartOrResume}
         currentRank={currentRank}
         rankProgressDisplay={rankProgressDisplay}
         rankProgressPercentage={rankProgressPercentage}
@@ -2335,7 +2718,7 @@ export default function App() {
         winsP1={winsP1}
         winsP2={winsP2}
         setShowResetConfirm={setShowResetConfirm}
-        helpConfig={helpConfig}
+        helpConfig={menuHelpConfig}
       />
     );
   };
@@ -2370,7 +2753,7 @@ export default function App() {
       </div>
  
        {/* POKI RESPONSIVE ASPECT-RATIO GAME FRAME */}
-       <div id="poki-game-frame" key={layoutConfig.name} className={`poki-game-frame ${layoutConfig.gameFrameClass} ${currentTheme.dialogBg} border-2 ${currentTheme.borderAccent || "border-[#5066c7]/45"} rounded-3xl shadow-[0_24px_60px_rgba(8,12,32,0.45),inset_0_2px_4px_rgba(255,255,255,0.12)] flex flex-col sm:flex-row justify-between overflow-hidden relative transition-all duration-300 ease-in-out ${isShaking ? "animate-screen-shake" : ""} ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+       <div id="poki-game-frame" key={`${layoutConfig.name}-${isPortrait ? "portrait" : "landscape"}`} className={`poki-game-frame ${layoutConfig.gameFrameClass} ${currentTheme.dialogBg} border-2 ${currentTheme.borderAccent || "border-[#5066c7]/45"} rounded-3xl shadow-[0_24px_60px_rgba(8,12,32,0.45),inset_0_2px_4px_rgba(255,255,255,0.12)] flex flex-col sm:flex-row justify-between overflow-hidden relative transition-all duration-300 ease-in-out ${isShaking ? "animate-screen-shake" : ""} ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
 
         {/* TOPBAR / HEADER (Portrait Mode Only - Hidden in 2 Players Mobile Mode to maximize board space) */}
         <div className={`${layoutConfig.showTopBar ? "flex" : "hidden"} flex-shrink-0 ${currentTheme.sidebar} backdrop-blur-md border-b ${currentTheme.borderAccent || "border-[#4d5cb5]/40"} px-3.5 py-2 items-center justify-between landscape:hidden z-40 relative w-full shadow-[0_4px_16px_rgba(10,14,35,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)] transition-all duration-300 ${
@@ -2464,7 +2847,7 @@ export default function App() {
                       </div>
 
                       <div className="flex flex-col items-center">
-                        <span className="text-[9px] text-slate-400 font-black tracking-widest uppercase mb-1 opacity-80">CURRENT RANK</span>
+                        <span className="text-[9px] text-slate-400 font-black tracking-widest uppercase mb-1 opacity-80">{t.currentRankLabel ? t.currentRankLabel.toUpperCase() : "CURRENT RANK"}</span>
                         <span className={`font-black text-sm tracking-wide uppercase ${currentRank.color} drop-shadow-sm`}>
                           {t[currentRank.nameKey]}
                         </span>
@@ -2490,17 +2873,17 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Larger Rank Progress Bar */}
-                    <div id="rank-progress-card" className="flex flex-col gap-2 w-full bg-[#121636]/65 border border-[#2b356c]/35 rounded-xl p-3 shadow-md">
-                      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-300 px-0.5">
+                    {/* Larger Flat 2D Rank Progress Bar */}
+                    <div id="rank-progress-card" className="flex flex-col gap-2 w-full bg-[#121636]/65 border border-[#2b356c]/35 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-300 px-0.5">
                         <span>
                           {t.progressLabel}
                         </span>
-                        <span className="font-sans text-cyan-400 font-black text-xs sm:text-sm drop-shadow-[0_0_4px_rgba(6,182,212,0.4)]">{rankProgressDisplay}</span>
+                        <span className="font-mono text-cyan-400 font-black text-xs sm:text-sm">{rankProgressDisplay}</span>
                       </div>
-                      <div className="w-full h-3.5 bg-slate-950/80 rounded-full overflow-hidden border border-slate-800 relative shadow-inner">
+                      <div className="w-full h-7 bg-slate-900 rounded-full overflow-hidden border border-slate-700/60 p-0.5 relative">
                         <div 
-                          className="h-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-fuchsia-500 rounded-full transition-all duration-700 ease-out shadow-[0_0_12px_rgba(6,182,212,0.7)]"
+                          className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 rounded-full transition-all duration-700 ease-out"
                           style={{ width: `${rankProgressPercentage}%` }}
                         />
                       </div>
@@ -2511,7 +2894,7 @@ export default function App() {
                     {/* Wins Header / Row */}
                     <div className="flex items-center justify-between w-full portrait:flex-row landscape:flex-col landscape:items-stretch gap-1.5">
                       {/* Player 1 Wins */}
-                      <div className="flex-1 flex items-center justify-between gap-1 border-slate-700/20 portrait:pr-2.5 portrait:border-r landscape:border-b landscape:pb-1.5">
+                      <div className="flex-1 flex items-center justify-between gap-1 border-slate-700/20 portrait:pr-2.5 portrait:border-r landscape:border-r-0 landscape:border-b landscape:pb-1.5 landscape:pr-0">
                         <div className="flex items-center gap-1.5 text-slate-300">
                           <span className="w-2.5 h-2.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)] animate-pulse" />
                           <span className="font-extrabold text-slate-200 uppercase tracking-wider text-[9px] sm:text-[10px]">
@@ -2601,20 +2984,20 @@ export default function App() {
                         setIsGameTypeDropdownOpen(false);
                         setIsBoardSizeDropdownOpen(false);
                       }}
-                      className="w-full py-2 px-4 rounded-2xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_6px_16px_rgba(234,179,8,0.3),inset_0_1.5px_1px_rgba(255,255,255,0.4)] hover:from-[#ffe066] hover:to-[#fcae00] hover:shadow-[0_10px_22px_rgba(234,179,8,0.4)] active:scale-98 text-xs font-black flex items-center justify-between transition-all duration-200 focus:outline-none cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0"
+                      className="w-full py-2 px-4 rounded-2xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-sm lg:shadow-[0_6px_16px_rgba(234,179,8,0.3),inset_0_1.5px_1px_rgba(255,255,255,0.4)] hover:from-[#ffe066] hover:to-[#fcae00] lg:hover:shadow-[0_10px_22px_rgba(234,179,8,0.4)] text-xs font-black flex items-center justify-between transition-colors duration-150 focus:outline-none cursor-pointer lg:-translate-y-[2px] lg:hover:-translate-y-1"
                     >
                       <span className="text-xs font-black tracking-wide">
-                        {memoryMode === "solo" ? "Classic" : memoryMode === "vsBot" ? "Challenge" : "2 Players"}
+                        {memoryMode === "solo" ? "Classic" : memoryMode === "twoPlayers" ? "2 Players" : "Challenge"}
                       </span>
                       <ChevronDown className={`w-4 h-4 text-slate-950 transition-transform duration-300 ${isPlayModeDropdownOpen ? "rotate-180" : ""}`} />
                     </button>
 
                     {/* Options Dropdown Menu */}
                     <div
-                      className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-[#252f67]/95 backdrop-blur-xl border-2 border-[#4c5fbd]/60 rounded-2xl p-1.5 mt-1.5 shadow-[0_12px_32px_rgba(10,14,35,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] ${
+                      className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-[#252f67]/95 backdrop-blur-xl rounded-2xl shadow-[0_12px_32px_rgba(10,14,35,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] ${
                         isPlayModeDropdownOpen
-                          ? "max-h-[220px] opacity-100 scale-100 pointer-events-auto"
-                          : "max-h-0 opacity-0 scale-95 pointer-events-none"
+                          ? "max-h-[220px] opacity-100 scale-100 pointer-events-auto border-2 border-[#4c5fbd]/60 p-1.5 mt-1.5"
+                          : "max-h-0 opacity-0 scale-95 pointer-events-none border-0 p-0 mt-0"
                       }`}
                     >
                       {/* Option 1: Classic */}
@@ -2635,7 +3018,7 @@ export default function App() {
                             : "bg-transparent text-slate-350 hover:text-slate-100 hover:bg-[#34448e]/60 border border-transparent"
                         }`}
                       >
-                        <span>Classic</span>
+                        <span>{t.modeClassic}</span>
                         {memoryMode === "solo" && (
                           <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                         )}
@@ -2648,7 +3031,7 @@ export default function App() {
                           synth.playSelect();
                           setIsPlayModeDropdownOpen(false);
                           if (memoryMode !== "twoPlayers") {
-                            const valid2pDiff = (difficulty === "5x5" || difficulty === "5x6" || difficulty === "6x6") ? difficulty : "5x5";
+                            const valid2pDiff = (difficulty === "5x5" || difficulty === "6x6" || difficulty === "6x8" || difficulty === "7x8") ? difficulty : "5x5";
                             setPendingMemoryMode("twoPlayers");
                             setPendingDifficulty(valid2pDiff);
                             setShowMemoryConfirm(true);
@@ -2660,7 +3043,7 @@ export default function App() {
                             : "bg-transparent text-slate-350 hover:text-slate-100 hover:bg-[#34448e]/60 border border-transparent"
                         }`}
                       >
-                        <span>2 Players</span>
+                        <span>{t.modeTwoPlayers}</span>
                         {memoryMode === "twoPlayers" && (
                           <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                         )}
@@ -2684,7 +3067,7 @@ export default function App() {
                             : "bg-transparent text-slate-350 hover:text-slate-100 hover:bg-[#34448e]/60 border border-transparent"
                         }`}
                       >
-                        <span>Challenge</span>
+                        <span>{t.modeBattle}</span>
                         {memoryMode === "vsBot" && (
                           <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                         )}
@@ -2711,7 +3094,7 @@ export default function App() {
                           synth.playSelect();
                           setIsBoardSizeDropdownOpen(!isBoardSizeDropdownOpen);
                         }}
-                        className="w-full py-2 px-4 rounded-2xl bg-gradient-to-b from-[#34448e] to-[#25326d] hover:from-[#3f52aa] hover:to-[#2e3e86] border-2 border-[#546bbf]/50 text-slate-100 text-xs font-black flex items-center justify-between transition-all duration-200 focus:outline-none cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-98 shadow-[0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.12)] hover:shadow-[0_10px_22px_rgba(0,0,0,0.3)]"
+                        className="w-full py-2 px-4 rounded-2xl bg-gradient-to-b from-[#34448e] to-[#25326d] hover:from-[#3f52aa] hover:to-[#2e3e86] border-2 border-[#546bbf]/50 text-slate-100 text-xs font-black flex items-center justify-between transition-colors duration-150 focus:outline-none cursor-pointer lg:-translate-y-[2px] lg:hover:-translate-y-1 shadow-sm lg:shadow-[0_6px_16px_rgba(0,0,0,0.2)]"
                       >
                         <span className="text-xs font-black tracking-wide">
                           {t.boardSizeLabels[difficulty as keyof typeof t.boardSizeLabels] || t.boardSizeLabels["3x4"]}
@@ -2722,26 +3105,26 @@ export default function App() {
                       {/* Options Dropdown Menu */}
                       <div
                         id="board-size-dropdown-menu"
-                        className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-[#252f67]/95 backdrop-blur-xl border-2 border-[#4c5fbd]/60 rounded-2xl p-1.5 mt-1.5 shadow-[0_12px_32px_rgba(10,14,35,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] ${
+                        className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-[#252f67]/95 backdrop-blur-xl rounded-2xl shadow-[0_12px_32px_rgba(10,14,35,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] ${
                           isBoardSizeDropdownOpen
-                            ? "max-h-[250px] opacity-100 scale-100 pointer-events-auto"
-                            : "max-h-0 opacity-0 scale-95 pointer-events-none"
+                            ? "max-h-[250px] opacity-100 scale-100 pointer-events-auto border-2 border-[#4c5fbd]/60 p-1.5 mt-1.5"
+                            : "max-h-0 opacity-0 scale-95 pointer-events-none border-0 p-0 mt-0"
                         }`}
                       >
                         {(memoryMode === "twoPlayers"
                           ? [
                               { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                              { key: "5x6", label: t.boardSizeLabels["5x6"] },
                               { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                              { key: "6x8", label: t.boardSizeLabels["6x8"] }
+                              { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                              { key: "7x8", label: t.boardSizeLabels["7x8"] }
                             ]
                           : [
                               { key: "3x4", label: t.boardSizeLabels["3x4"] },
                               { key: "4x5", label: t.boardSizeLabels["4x5"] },
                               { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                              { key: "5x6", label: t.boardSizeLabels["5x6"] },
                               { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                              { key: "6x8", label: t.boardSizeLabels["6x8"] }
+                              { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                              { key: "7x8", label: t.boardSizeLabels["7x8"] }
                             ]
                         ).map((opt) => {
                           const isSelected = difficulty === opt.key;
@@ -2768,9 +3151,9 @@ export default function App() {
                                   }
                                 }
                               }}
-                              className={`w-full py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-between cursor-pointer ${
+                              className={`w-full py-2 px-3 rounded-xl text-xs font-black transition-colors duration-150 flex items-center justify-between cursor-pointer ${
                                 isSelected
-                                  ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                                  ? "bg-amber-400 text-slate-950 border-2 border-amber-300 font-black shadow-sm"
                                   : isLocked
                                   ? "bg-slate-950/80 text-amber-300 border border-amber-500/40 hover:bg-amber-950/50"
                                   : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-[#34448e]/60 border border-transparent font-bold"
@@ -2806,7 +3189,7 @@ export default function App() {
                 {memoryMode !== "vsBot" && (
                   <button
                     onClick={() => { synth.playSelect(); generateMemoryGame(difficulty); }}
-                    className="w-full mt-1.5 py-2.5 rounded-2xl border-2 border-[#546bbf]/40 bg-gradient-to-r from-[#2c377a] to-[#394998] hover:from-[#34428f] hover:to-[#4357b1] text-slate-100 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 shadow-[0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)] hover:shadow-[0_10px_22px_rgba(0,0,0,0.3)]"
+                    className="w-full mt-1.5 py-2.5 rounded-2xl border-2 border-[#546bbf]/40 bg-gradient-to-r from-[#2c377a] to-[#394998] hover:from-[#34428f] hover:to-[#4357b1] text-slate-100 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer shadow-sm lg:shadow-[0_6px_16px_rgba(0,0,0,0.2)] lg:-translate-y-[2px] lg:hover:-translate-y-1"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     {t.reshuffle}
@@ -2821,10 +3204,10 @@ export default function App() {
               <button
                 id="btn-sidebar-how-to-play"
                 onClick={() => { synth.playSelect(); setIsHowToPlayOpen(!isHowToPlayOpen); }}
-                className={`px-4 py-2.5 rounded-2xl border-2 text-xs font-black flex items-center justify-between gap-1 transition-all duration-200 focus:outline-none cursor-pointer w-full -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
+                className={`px-4 py-2.5 rounded-2xl border-2 text-xs font-black flex items-center justify-between gap-1 transition-colors duration-150 focus:outline-none cursor-pointer w-full lg:-translate-y-[2px] lg:hover:-translate-y-1 ${
                   isHowToPlayOpen
-                    ? "bg-gradient-to-r from-cyan-500/25 to-cyan-600/15 text-cyan-300 border-cyan-400/50 shadow-[0_6px_16px_rgba(34,211,238,0.25),inset_0_1px_1px_rgba(255,255,255,0.1)]"
-                    : "bg-gradient-to-b from-[#34448e]/60 to-[#25326d]/60 hover:from-[#3a4ba1]/70 hover:to-[#2b3a7a]/70 border-[#546bbf]/30 text-slate-100 shadow-[0_4px_12px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.08)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
+                    ? "bg-gradient-to-r from-cyan-500/25 to-cyan-600/15 text-cyan-300 border-cyan-400/50 shadow-sm lg:shadow-[0_6px_16px_rgba(34,211,238,0.25)]"
+                    : "bg-gradient-to-b from-[#34448e]/60 to-[#25326d]/60 hover:from-[#3a4ba1]/70 hover:to-[#2b3a7a]/70 border-[#546bbf]/30 text-slate-100 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 }`}
               >
                 <div className="flex items-center gap-1.5">
@@ -2843,7 +3226,7 @@ export default function App() {
                   <button
                     id="btn-sidebar-shop"
                     onClick={() => { synth.playSelect(); setIsShopOpen(true); }}
-                    className="flex px-4 py-2.5 rounded-2xl border-2 bg-gradient-to-b from-[#34448e]/60 to-[#25326d]/60 hover:from-[#3a4ba1]/70 hover:to-[#2b3a7a]/70 border-[#546bbf]/30 text-slate-100 text-xs font-black items-center gap-1.5 transition-all duration-200 focus:outline-none cursor-pointer w-full -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 shadow-[0_4px_12px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.08)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
+                    className="flex px-4 py-2.5 rounded-2xl border-2 bg-gradient-to-b from-[#34448e]/60 to-[#25326d]/60 hover:from-[#3a4ba1]/70 hover:to-[#2b3a7a]/70 border-[#546bbf]/30 text-slate-100 text-xs font-black items-center gap-1.5 transition-colors duration-150 focus:outline-none cursor-pointer w-full lg:-translate-y-[2px] lg:hover:-translate-y-1 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                   >
                     <Store className="w-3.5 h-3.5 text-amber-400" />
                     <span>
@@ -2855,7 +3238,7 @@ export default function App() {
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <button
                       onClick={() => { synth.playSelect(); setIsSettingsOpen(true); }}
-                      className="w-full py-2.5 rounded-2xl bg-gradient-to-b from-[#34448e] to-[#25326d] border border-[#546bbf]/40 hover:from-[#3e51aa] hover:to-[#2e3e86] text-slate-100 flex items-center justify-center gap-1.5 text-xs font-extrabold focus:outline-none cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
+                      className="w-full py-2.5 rounded-2xl bg-gradient-to-b from-[#34448e] to-[#25326d] border border-[#546bbf]/40 hover:from-[#3e51aa] hover:to-[#2e3e86] text-slate-100 flex items-center justify-center gap-1.5 text-xs font-extrabold focus:outline-none cursor-pointer lg:-translate-y-[2px] lg:hover:-translate-y-1 transition-colors duration-150 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                     >
                       <Settings className="w-3.5 h-3.5 text-cyan-400" />
                       <span>{t.settingsTitleShort}</span>
@@ -2930,17 +3313,17 @@ export default function App() {
           
           {/* Universal fixed Menu Button and Pause Button for Mobile & Tablet */}
           {layoutConfig.showTabletMenuToggle && (
-            <div className="absolute top-3 left-3 z-50 flex flex-col gap-2 items-start pointer-events-auto">
+            <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-50 flex flex-col gap-2 items-start pointer-events-auto">
               <button
                 id="btn-mobile-menu-toggle"
                 onClick={() => {
                   synth.playSelect();
                   setIsSidebarCollapsed(!isSidebarCollapsed);
                 }}
-                className="p-2 rounded-2xl bg-gradient-to-b from-[#34448e] via-[#2a3877] to-[#212b5e] hover:from-[#3f52a8] hover:to-[#283573] border-2 border-[#546bbf]/60 text-slate-100 shadow-[0_6px_16px_rgba(0,0,0,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.2)] hover:shadow-[0_10px_22px_rgba(0,0,0,0.45)] -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 flex items-center justify-center cursor-pointer"
+                className="p-2 sm:p-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-slate-950 border border-amber-300 transition-colors flex items-center justify-center cursor-pointer"
                 title={isSidebarCollapsed ? "Show Menu" : "Hide Menu"}
               >
-                <Menu className="w-4 h-4 text-cyan-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]" />
+                <Menu className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-slate-950 stroke-[2.5]" />
               </button>
 
               {/* Compact Pause & Hint Buttons for Mobile Solo Mode */}
@@ -3029,13 +3412,16 @@ export default function App() {
             </div>
           )}
 
-          {/* --- DYNAMIC RENDER OF SELECTED GAME MODE --- */}
-          {layoutConfig.allowMobileConfigMenu && isMobileConfigOpen ? (
-            /* MOBILE CONFIG MENU SCREEN (FULL SCREEN) */
+          {/* --- MOBILE CONFIG MENU OVERLAY (PERMANENTLY MOUNTED FOR 0MS TOGGLE LATENCY) --- */}
+          {layoutConfig.allowMobileConfigMenu && (
+            /* MOBILE CONFIG MENU SCREEN (OVERLAY) */
             <div 
               id="mobile-menu-container" 
-              className={`w-full h-full flex flex-col relative z-50 ${currentTheme.dialogBg} text-slate-100 animate-fade-in ${!isPortrait ? 'overflow-hidden justify-between p-2 sm:p-4' : 'overflow-y-auto p-4'}`}
+              className={`fixed inset-0 z-[100] flex flex-col ${currentTheme.dialogBg} text-slate-100 transition-[opacity,visibility] duration-200 overflow-y-auto ${
+                isMobileConfigOpen ? "opacity-100 pointer-events-auto visible" : "opacity-0 pointer-events-none invisible"
+              } ${!isPortrait ? 'justify-between p-2 sm:p-4' : 'p-4'}`}
               style={{
+                willChange: 'opacity, visibility',
                 paddingTop: !isPortrait ? '8px' : 'calc(env(safe-area-inset-top, 16px) + 8px)',
                 paddingBottom: !isPortrait ? 'calc(env(safe-area-inset-bottom, 8px) + 2px)' : 'calc(env(safe-area-inset-bottom, 16px) + 8px)',
                 paddingLeft: !isPortrait ? 'calc(env(safe-area-inset-left, 12px) + 4px)' : 'calc(env(safe-area-inset-left, 16px) + 8px)',
@@ -3043,7 +3429,7 @@ export default function App() {
               }}
             >
               <PanelBackground showTopBar={true} />
-              {/* Header with Title and Close button (Portrait Only) */}
+              {/* Header with Title (Portrait Only) */}
               {isPortrait && (
                 <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-3 shrink-0">
                   <div className="flex items-center gap-2">
@@ -3053,17 +3439,6 @@ export default function App() {
                     <span className="text-xs font-black tracking-wider uppercase bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent">
                       Emoji BrainPop Menu
                     </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        synth.playSelect();
-                        setIsMobileConfigOpen(false);
-                      }}
-                      className="p-1.5 rounded-xl bg-slate-850 border border-slate-800 text-slate-400 hover:text-white cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-md"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
               )}
@@ -3078,74 +3453,71 @@ export default function App() {
                     <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
                       {t.playModeLabel}
                     </span>
-                    <div className="bg-[#1a234e]/60 backdrop-blur-sm border-2 border-[#3b4b91]/50 p-2.5 rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.25),inset_0_1.5px_1px_rgba(255,255,255,0.1)] grid grid-cols-3 gap-2">
+                    <div className="bg-[#182046] border border-slate-800/80 p-2 rounded-2xl shadow-none grid grid-cols-3 gap-2">
                       {/* Classic */}
                       <button
                         onClick={() => {
                           synth.playSelect();
-                          if (memoryMode !== "solo") {
-                            setDifficulty("3x4");
-                            setMemoryMode("solo");
-                            generateMemoryGame("3x4");
+                          if (pendingMemoryMode !== "solo") {
+                            setPendingDifficulty("3x4");
+                            setPendingMemoryMode("solo");
                           }
                         }}
-                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-all duration-200 border flex flex-col items-center gap-1 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                          memoryMode === "solo"
-                            ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black animate-scale-up"
-                            : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
+                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-1 cursor-pointer ${
+                          pendingMemoryMode === "solo"
+                            ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                            : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
                         }`}
                       >
-                        <Zap className={`w-5 h-5 ${memoryMode === "solo" ? "text-slate-950" : "text-amber-400"}`} />
+                        <Zap className={`w-5 h-5 ${pendingMemoryMode === "solo" ? "text-slate-950" : "text-amber-400"}`} />
                         <span>Classic</span>
-                      </button>
-
-                      {/* Challenge Mode */}
-                      <button
-                        onClick={() => {
-                          synth.playSelect();
-                          if (memoryMode !== "vsBot") {
-                            const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
-                            setDifficulty(finalDiff);
-                            setMemoryMode("vsBot");
-                            generateMemoryGame(finalDiff);
-                          }
-                        }}
-                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-all duration-200 border flex flex-col items-center gap-1 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                          memoryMode === "vsBot"
-                            ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black animate-scale-up"
-                            : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
-                        }`}
-                      >
-                        <Bot className={`w-5 h-5 ${memoryMode === "vsBot" ? "text-slate-950" : "text-cyan-400"}`} />
-                        <span>{t.modeBattle}</span>
                       </button>
 
                       {/* 2 Players */}
                       <button
                         onClick={() => {
                           synth.playSelect();
-                          if (memoryMode !== "twoPlayers") {
-                            const finalDiff = (difficulty === "5x5" || difficulty === "5x6" || difficulty === "6x6") ? difficulty : "5x5";
-                            setDifficulty(finalDiff);
-                            setMemoryMode("twoPlayers");
-                            generateMemoryGame(finalDiff);
+                          if (pendingMemoryMode !== "twoPlayers") {
+                            const finalDiff = (pendingDifficulty === "5x5" || pendingDifficulty === "5x6" || pendingDifficulty === "6x6" || pendingDifficulty === "6x8") ? pendingDifficulty : "5x5";
+                            setPendingDifficulty(finalDiff);
+                            setPendingMemoryMode("twoPlayers");
                           }
                         }}
-                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-all duration-200 border flex flex-col items-center gap-1 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
-                          memoryMode === "twoPlayers"
-                            ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black animate-scale-up"
-                            : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
+                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-1 cursor-pointer ${
+                          pendingMemoryMode === "twoPlayers"
+                            ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                            : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
                         }`}
                       >
-                        <Users className={`w-5 h-5 ${memoryMode === "twoPlayers" ? "text-slate-950" : "text-rose-400"}`} />
+                        <Users className={`w-5 h-5 ${pendingMemoryMode === "twoPlayers" ? "text-slate-950" : "text-rose-400"}`} />
                         <span>2 Players</span>
+                      </button>
+
+                      {/* Challenge Mode */}
+                      <button
+                        onClick={() => {
+                          synth.playSelect();
+                          if (pendingMemoryMode !== "vsBot") {
+                            const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
+                            setPendingDifficulty(finalDiff);
+                            setPendingMemoryMode("vsBot");
+                          }
+                        }}
+                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-1 cursor-pointer ${
+                          pendingMemoryMode === "vsBot"
+                            ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                            : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
+                        }`}
+                      >
+                        <Bot className={`w-5 h-5 ${pendingMemoryMode === "vsBot" ? "text-slate-950" : "text-cyan-400"}`} />
+                        <span>{t.modeBattle}</span>
                       </button>
                     </div>
                   </div>
 
                   {/* 2. DYNAMIC INFORMATION SECTION */}
                   <div className="shrink-0 flex flex-col gap-2">
-                    {memoryMode === "solo" && (
+                    {pendingMemoryMode === "solo" && (
                       <div className="flex flex-col gap-2.5">
                         {/* Prominent Current Score Badges for Portrait Mobile Menu */}
                         <div className="grid grid-cols-2 gap-3 mb-1">
@@ -3183,11 +3555,11 @@ export default function App() {
                             { key: "3x4", label: t.boardSizeLabels["3x4"] },
                             { key: "4x5", label: t.boardSizeLabels["4x5"] },
                             { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                            { key: "5x6", label: t.boardSizeLabels["5x6"] },
                             { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                            { key: "6x8", label: t.boardSizeLabels["6x8"] }
+                            { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                            { key: "7x8", label: t.boardSizeLabels["7x8"] }
                           ] as const).map((opt) => {
-                            const isSelected = difficulty === opt.key;
+                            const isSelected = pendingDifficulty === opt.key;
                             const isLocked = !isBoardSizeUnlocked(opt.key, "solo");
                             const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
                             return (
@@ -3196,25 +3568,23 @@ export default function App() {
                                 onClick={() => {
                                   if (isLocked) {
                                     handleUnlockBoardSize(opt.key, () => {
-                                      setDifficulty(opt.key);
-                                      setMemoryMode("solo");
-                                      generateMemoryGame(opt.key);
+                                      setPendingDifficulty(opt.key);
+                                      setPendingMemoryMode("solo");
                                     });
                                   } else {
                                     synth.playSelect();
-                                    if (difficulty !== opt.key) {
-                                      setDifficulty(opt.key);
-                                      setMemoryMode("solo");
-                                      generateMemoryGame(opt.key);
+                                    if (pendingDifficulty !== opt.key) {
+                                      setPendingDifficulty(opt.key);
+                                      setPendingMemoryMode("solo");
                                     }
                                   }
                                 }}
-                                className={`py-2 px-1 rounded-xl text-[11px] font-extrabold transition-all duration-200 border flex items-center justify-center gap-1 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
+                                className={`py-2 px-1 rounded-xl text-[11px] font-extrabold transition-colors duration-150 border flex items-center justify-center gap-1 cursor-pointer ${
                                   isSelected
-                                    ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black scale-102"
+                                    ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
                                     : isLocked
-                                    ? "bg-gradient-to-b from-slate-900/95 to-amber-950/50 text-amber-300 border-amber-500/50 hover:bg-amber-900/50 shadow-[0_2px_6px_rgba(245,158,11,0.2)]"
-                                    : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
+                                    ? "bg-slate-900 text-amber-300 border border-amber-500/40 shadow-none"
+                                    : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
                                 }`}
                               >
                                 {isLocked ? (
@@ -3238,12 +3608,12 @@ export default function App() {
                       </div>
                     )}
 
-                    {memoryMode === "vsBot" && (
+                    {pendingMemoryMode === "vsBot" && (
                       <div className="flex flex-col gap-2">
                         <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
                           {t.battleInfoTitle}
                         </span>
-                        <div className="bg-[#303c81]/30 backdrop-blur-sm border border-[#546bbf]/20 p-3 rounded-2xl flex flex-col gap-3 shadow-inner">
+                        <div className="bg-[#1f2856] md:bg-[#303c81]/30 md:backdrop-blur-sm backdrop-blur-none border border-[#546bbf]/20 p-3 rounded-2xl flex flex-col gap-3 shadow-inner">
                           {/* Rank & Rating Row */}
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
@@ -3276,18 +3646,18 @@ export default function App() {
                           </div>
                           
                           {/* Progress bar */}
-                          <div className="flex flex-col gap-1.5 w-full border-t border-slate-800/40 pt-2">
-                            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-300">
+                          <div className="flex flex-col gap-2 w-full border-t border-slate-800/40 pt-2.5">
+                            <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-300">
                               <span>
                                 {t.progressLabel}
                               </span>
-                              <span className="font-sans text-cyan-400 font-black text-[11px] drop-shadow-[0_0_4px_rgba(6,182,212,0.4)]">
+                              <span className="font-mono text-cyan-400 font-black text-xs sm:text-sm">
                                 {rankProgressDisplay}
                               </span>
                             </div>
-                            <div className="w-full h-2.5 bg-slate-950/80 rounded-full overflow-hidden border border-slate-800/60 relative shadow-inner">
+                            <div className="w-full h-6 sm:h-7 bg-slate-900 rounded-full overflow-hidden border border-slate-700/60 p-0.5 relative">
                               <div 
-                                className="h-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-fuchsia-500 rounded-full transition-all duration-700 ease-out shadow-[0_0_12px_rgba(6,182,212,0.7)]"
+                                className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 rounded-full transition-all duration-700 ease-out"
                                 style={{ width: `${rankProgressPercentage}%` }}
                               />
                             </div>
@@ -3296,12 +3666,12 @@ export default function App() {
                       </div>
                     )}
 
-                    {memoryMode === "twoPlayers" && (
+                    {pendingMemoryMode === "twoPlayers" && (
                       <div className="flex flex-col gap-2">
                         <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
                           {t.twoPlayersMatch}
                         </span>
-                        <div className="bg-[#303c81]/30 backdrop-blur-sm border border-[#546bbf]/20 p-3 rounded-2xl flex flex-col gap-2 shadow-inner">
+                        <div className="bg-[#1f2856] md:bg-[#303c81]/30 md:backdrop-blur-sm backdrop-blur-none border border-[#546bbf]/20 p-3 rounded-2xl flex flex-col gap-2 shadow-inner">
                           <div className="grid grid-cols-2 gap-3">
                             {/* Player 1 */}
                             <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-white/5">
@@ -3334,11 +3704,11 @@ export default function App() {
                             <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-1.5">
                               {([
                                 { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                                { key: "5x6", label: t.boardSizeLabels["5x6"] },
                                 { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                                { key: "6x8", label: t.boardSizeLabels["6x8"] }
+                                { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                                { key: "7x8", label: t.boardSizeLabels["7x8"] }
                               ] as const).map((opt) => {
-                                const isSelected = difficulty === opt.key;
+                                const isSelected = pendingDifficulty === opt.key;
                                 const isLocked = !isBoardSizeUnlocked(opt.key, "twoPlayers");
                                 const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
                                 return (
@@ -3347,25 +3717,23 @@ export default function App() {
                                     onClick={() => {
                                       if (isLocked) {
                                         handleUnlockBoardSize(opt.key, () => {
-                                          setDifficulty(opt.key);
-                                          setMemoryMode("twoPlayers");
-                                          generateMemoryGame(opt.key);
+                                          setPendingDifficulty(opt.key);
+                                          setPendingMemoryMode("twoPlayers");
                                         });
                                       } else {
                                         synth.playSelect();
-                                        if (difficulty !== opt.key) {
-                                          setDifficulty(opt.key);
-                                          setMemoryMode("twoPlayers");
-                                          generateMemoryGame(opt.key);
+                                        if (pendingDifficulty !== opt.key) {
+                                          setPendingDifficulty(opt.key);
+                                          setPendingMemoryMode("twoPlayers");
                                         }
                                       }
                                     }}
-                                    className={`py-1 rounded-lg text-[10px] font-black transition-all duration-200 border flex items-center justify-center gap-1 cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 ${
+                                    className={`py-1 rounded-lg text-[10px] font-black transition-colors duration-150 border flex items-center justify-center gap-1 cursor-pointer ${
                                       isSelected
-                                        ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/90 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                                        ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
                                         : isLocked
-                                        ? "bg-gradient-to-b from-slate-900/95 to-amber-950/50 text-amber-300 border-amber-500/50 hover:bg-amber-900/50 shadow-[0_2px_6px_rgba(245,158,11,0.2)]"
-                                        : "bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-850 hover:text-slate-100 shadow-[0_2px_6px_rgba(0,0,0,0.18)] font-bold"
+                                        ? "bg-slate-900 text-amber-300 border border-amber-500/40 shadow-none"
+                                        : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
                                     }`}
                                   >
                                     {isLocked ? (
@@ -3409,30 +3777,30 @@ export default function App() {
                   </div>
 
                   {/* 3. HOW TO PLAY COLLAPSIBLE */}
-                  <div className="bg-slate-900/50 border border-slate-850 rounded-2xl p-3 flex flex-col gap-1.5 shrink-0">
+                  <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-3 flex flex-col gap-1.5 shrink-0">
                     <div className="flex items-center gap-2 font-black text-xs text-slate-200">
-                      {helpConfig.iconName === "SquareStack" ? (
+                      {menuHelpConfig.iconName === "SquareStack" ? (
                         <SquareStack className="w-4 h-4 text-cyan-400 shrink-0" />
-                      ) : helpConfig.iconName === "Users" ? (
+                      ) : menuHelpConfig.iconName === "Users" ? (
                         <Users className="w-4 h-4 text-cyan-400 shrink-0" />
-                      ) : helpConfig.iconName === "Bot" ? (
+                      ) : menuHelpConfig.iconName === "Bot" ? (
                         <Bot className="w-4 h-4 text-cyan-400 shrink-0" />
                       ) : (
                         <Info className="w-4 h-4 text-cyan-400 shrink-0" />
                       )}
-                      <span>{helpConfig.title}</span>
+                      <span>{menuHelpConfig.title}</span>
                     </div>
-                    <p className="text-[9px] sm:text-[10.5px] leading-snug text-slate-400 whitespace-pre-line overflow-y-auto max-h-[120px] border-t border-slate-850/60 pt-2">
-                      {helpConfig.rules}
+                    <p className="text-[9px] sm:text-[10.5px] leading-snug text-slate-400 whitespace-pre-line overflow-y-auto max-h-[120px] border-t border-slate-800/60 pt-2">
+                      {menuHelpConfig.rules}
                     </p>
                   </div>
 
-                  {/* System quick settings inside shared 3D frame */}
-                  <div className="bg-[#1a234e]/60 backdrop-blur-sm border-2 border-[#3b4b91]/50 p-2.5 rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.25),inset_0_1.5px_1px_rgba(255,255,255,0.1)] grid grid-cols-3 gap-2 shrink-0">
+                  {/* System quick settings inside clean 2D frame */}
+                  <div className="bg-[#182046] border border-slate-800/80 p-2.5 rounded-2xl shadow-none grid grid-cols-3 gap-2 shrink-0">
                     {/* Sound Toggle */}
                     <button
                       onClick={() => { synth.playSelect(); setSoundOn(!soundOn); }}
-                      className="py-2.5 px-2 rounded-xl bg-slate-900/60 border border-slate-850 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
+                      className="py-2.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
                       title="Toggle Sound"
                     >
                       {soundOn ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4 text-rose-400" />}
@@ -3442,7 +3810,7 @@ export default function App() {
                     {/* Shop Button */}
                     <button
                       onClick={() => { synth.playSelect(); setIsShopOpen(true); }}
-                      className="py-2.5 px-2 rounded-xl bg-slate-900/60 border border-slate-850 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
+                      className="py-2.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
                     >
                       <Store className="w-4 h-4 text-amber-400" />
                       <span>Shop</span>
@@ -3451,7 +3819,7 @@ export default function App() {
                     {/* Settings Button */}
                     <button
                       onClick={() => { synth.playSelect(); setIsSettingsOpen(true); }}
-                      className="py-2.5 px-2 rounded-xl bg-slate-900/60 border border-slate-850 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
+                      className="py-2.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
                     >
                       <Settings className="w-4 h-4 text-cyan-400 animate-spin-slow" />
                       <span>{t.settingsTitleShort}</span>
@@ -3462,10 +3830,9 @@ export default function App() {
                   <button
                     onClick={() => {
                       synth.playSelect();
-                      setIsMobileConfigOpen(false);
-                      setIsPaused(false); // Resume game when clicked
+                      applyPendingConfigurationAndStartOrResume();
                     }}
-                    className={`w-full py-3 rounded-2xl text-xs font-black shadow-[0_6px_18px_rgba(37,99,235,0.35)] hover:shadow-[0_10px_24px_rgba(37,99,235,0.5)] cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2 mt-auto shrink-0 -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 ${currentTheme.buttonPrimary}`}
+                    className="w-full py-3 rounded-2xl text-xs font-black bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-none cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2 mt-auto shrink-0 transition-colors duration-150"
                   >
                     <Play className="w-4 h-4 fill-current" />
                     <span>{t.startOrResume}</span>
@@ -3473,7 +3840,9 @@ export default function App() {
                 </div>
               )}
             </div>
-          ) : activeTab === "match" ? (
+          )}
+
+          {activeTab === "match" ? (
               
               // ==============================
               // CONNECTING MATCH CARDS COMPONENT
@@ -3532,6 +3901,8 @@ export default function App() {
                       connectionsCount={connections.length}
                       soundOn={soundOn}
                       setSoundOn={setSoundOn}
+                      botUsername={botUsername}
+                      currentBotDifficulty={currentBotDifficulty}
                     />
                   ) : (
                     <div className="relative z-20 flex justify-between items-center mb-6 border-b border-teal-200/60 pb-3">
@@ -3893,43 +4264,45 @@ export default function App() {
                 {isPaused && !checked && (
                   <div 
                     id="match-paused-overlay" 
-                    className="absolute inset-0 bg-[#0a0d18]/85 backdrop-blur-md z-50 rounded-2xl sm:rounded-3xl flex flex-col items-center justify-center p-4 sm:p-6 text-center select-none animate-fade-in"
+                    className="absolute inset-0 bg-[#0a0d18]/85 backdrop-blur-md z-[100] rounded-2xl sm:rounded-3xl flex flex-col items-center justify-center p-2.5 sm:p-6 text-center select-none animate-fade-in pointer-events-auto overflow-y-auto"
                   >
-                    <div className="bg-gradient-to-br from-[#1d2547]/95 via-[#151a36]/95 to-[#0e1226]/95 backdrop-blur-xl border border-amber-500/30 rounded-2xl p-5 sm:p-6 shadow-[0_25px_60px_rgba(0,0,0,0.7),0_0_20px_rgba(245,158,11,0.15)] flex flex-col items-center gap-4 max-w-xs sm:max-w-sm w-full">
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20 animate-pulse">
-                        <Pause className="w-6 h-6 sm:w-7 sm:h-7 fill-amber-400/80" />
+                    <div className="bg-gradient-to-br from-[#1d2547]/95 via-[#151a36]/95 to-[#0e1226]/95 backdrop-blur-xl border border-amber-500/30 rounded-2xl p-3.5 sm:p-6 shadow-[0_25px_60px_rgba(0,0,0,0.7),0_0_20px_rgba(245,158,11,0.15)] flex flex-col items-center gap-2 sm:gap-4 max-w-xs sm:max-w-sm w-full relative overflow-y-auto max-h-full my-auto pointer-events-auto">
+                      <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20 animate-pulse shrink-0">
+                        <Pause className="w-5 h-5 sm:w-7 sm:h-7 fill-amber-400/80" />
                       </div>
                       
-                      <div>
-                        <h3 className="font-black text-amber-100 text-base sm:text-xl tracking-wide uppercase">
+                      <div className="shrink-0">
+                        <h3 className="font-black text-amber-100 text-sm sm:text-xl tracking-wide uppercase">
                           {t.gamePaused}
                         </h3>
-                        <p className="text-slate-300/90 text-xs sm:text-sm mt-1 max-w-[260px] mx-auto leading-relaxed">
+                        <p className="text-slate-300/90 text-[11px] sm:text-sm mt-0.5 sm:mt-1 max-w-[260px] mx-auto leading-tight sm:leading-relaxed">
                           {t.gamePausedDesc}
                         </p>
                       </div>
 
-                      <div className="w-full flex flex-col gap-2 pt-1">
+                      <div className="w-full flex flex-col gap-2 pt-1 shrink-0">
                         <button
                           id="btn-paused-resume-match"
+                          type="button"
                           onClick={() => {
                             synth.playResume();
                             setIsPaused(false);
                           }}
-                          className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 active:scale-95 text-slate-950 font-black text-xs sm:text-sm tracking-wider uppercase transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20"
+                          className="w-full py-2 sm:py-3 px-4 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 active:scale-95 text-slate-950 font-black text-xs sm:text-sm tracking-wider uppercase transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 touch-manipulation pointer-events-auto"
                         >
-                          <Play className="w-4 h-4 fill-slate-950" />
+                          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-slate-950" />
                           <span>{t.resumeBtn}</span>
                         </button>
 
                         <button
                           id="btn-paused-restart-match"
+                          type="button"
                           onClick={() => {
                             synth.playSelect();
                             handleReplayOriginal();
                             setIsPaused(false);
                           }}
-                          className="w-full py-2 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 active:scale-95 text-[11px] sm:text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          className="w-full py-1.5 sm:py-2 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 active:scale-95 text-[11px] sm:text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer flex items-center justify-center gap-1.5 touch-manipulation pointer-events-auto"
                         >
                           <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
                           <span>{t.newGameText}</span>
@@ -3986,7 +4359,7 @@ export default function App() {
                       Emoji BrainPop
                     </span>
                     <span className="text-[8px] text-slate-600 font-medium tracking-wide mt-0.5">
-                      by hungcuong
+                      by Hung Cuong
                     </span>
                   </div>
                 </div>
@@ -4020,20 +4393,20 @@ export default function App() {
                         setIsPlayModeDropdownOpenMobile(!isPlayModeDropdownOpenMobile);
                         setIsBoardSizeDropdownOpenMobile(false);
                       }}
-                      className="w-full py-2 px-3.5 rounded-xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] hover:from-[#ffe066] hover:to-[#fcae00] hover:shadow-[0_8px_18px_rgba(234,179,8,0.4)] text-xs font-black flex items-center justify-between transition-all duration-200 focus:outline-none cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0"
+                      className="w-full py-2 px-3.5 rounded-xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-sm hover:from-[#ffe066] hover:to-[#fcae00] text-xs font-black flex items-center justify-between transition-colors duration-150 focus:outline-none cursor-pointer"
                     >
                       <span className="text-xs font-black tracking-wide">
-                        {memoryMode === "solo" ? "Classic" : memoryMode === "vsBot" ? "Challenge" : "2 Players"}
+                        {memoryMode === "solo" ? "Classic" : memoryMode === "twoPlayers" ? "2 Players" : "Challenge"}
                       </span>
                       <ChevronDown className={`w-3.5 h-3.5 text-slate-950 transition-transform duration-300 ${isPlayModeDropdownOpenMobile ? "rotate-180" : ""}`} />
                     </button>
 
                     {/* Options Dropdown Menu */}
                     <div
-                      className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-slate-950 border border-slate-850 rounded-xl p-1.5 mt-1 shadow-2xl ${
+                      className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-slate-950 rounded-xl shadow-2xl ${
                         isPlayModeDropdownOpenMobile
-                          ? "max-h-[220px] opacity-100 scale-100 pointer-events-auto"
-                          : "max-h-0 opacity-0 scale-95 pointer-events-none"
+                          ? "max-h-[220px] opacity-100 scale-100 pointer-events-auto border border-slate-800 p-1.5 mt-1"
+                          : "max-h-0 opacity-0 scale-95 pointer-events-none border-0 p-0 mt-0"
                       }`}
                     >
                       {/* Option 1: Classic */}
@@ -4048,9 +4421,9 @@ export default function App() {
                             setShowMemoryConfirm(true);
                           }
                         }}
-                        className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer ${
+                        className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-colors duration-150 flex items-center justify-between cursor-pointer ${
                           memoryMode === "solo"
-                            ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                            ? "bg-amber-400 text-slate-950 border-2 border-amber-300 font-black shadow-sm"
                             : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-slate-900/40 border border-transparent font-bold"
                         }`}
                       >
@@ -4067,15 +4440,15 @@ export default function App() {
                           synth.playSelect();
                           setIsPlayModeDropdownOpenMobile(false);
                           if (memoryMode !== "twoPlayers") {
-                            const valid2pDiff = (difficulty === "5x5" || difficulty === "5x6" || difficulty === "6x6") ? difficulty : "5x5";
+                            const valid2pDiff = (difficulty === "5x5" || difficulty === "6x6" || difficulty === "6x8" || difficulty === "7x8") ? difficulty : "5x5";
                             setPendingMemoryMode("twoPlayers");
                             setPendingDifficulty(valid2pDiff);
                             setShowMemoryConfirm(true);
                           }
                         }}
-                        className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer ${
+                        className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-colors duration-150 flex items-center justify-between cursor-pointer ${
                           memoryMode === "twoPlayers"
-                            ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                            ? "bg-amber-400 text-slate-950 border-2 border-amber-300 font-black shadow-sm"
                             : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-slate-900/40 border border-transparent font-bold"
                         }`}
                       >
@@ -4097,9 +4470,9 @@ export default function App() {
                             setShowMemoryConfirm(true);
                           }
                         }}
-                        className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer ${
+                        className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-colors duration-150 flex items-center justify-between cursor-pointer ${
                           memoryMode === "vsBot"
-                            ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                            ? "bg-amber-400 text-slate-950 border-2 border-amber-300 font-black shadow-sm"
                             : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-slate-900/40 border border-transparent font-bold"
                         }`}
                       >
@@ -4131,7 +4504,7 @@ export default function App() {
                           setIsBoardSizeDropdownOpenMobile(!isBoardSizeDropdownOpenMobile);
                           setIsPlayModeDropdownOpenMobile(false);
                         }}
-                        className="w-full py-1.5 px-3 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-750 text-slate-200 text-xs font-bold flex items-center justify-between transition-all duration-200 focus:outline-none cursor-pointer shadow-md"
+                        className="w-full py-1.5 px-3 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-between transition-colors duration-150 focus:outline-none cursor-pointer shadow-sm"
                       >
                         <span className="text-xs font-black tracking-wide">
                           {t.boardSizeLabels[difficulty as keyof typeof t.boardSizeLabels] || t.boardSizeLabels["3x4"]}
@@ -4141,26 +4514,26 @@ export default function App() {
 
                       {/* Options Dropdown Menu */}
                       <div
-                        className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-slate-950 border border-slate-850 rounded-xl p-1.5 mt-1 shadow-2xl ${
+                        className={`absolute left-0 right-0 z-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col gap-1 bg-slate-950 rounded-xl shadow-2xl ${
                           isBoardSizeDropdownOpenMobile
-                            ? "max-h-[250px] opacity-100 scale-100 pointer-events-auto"
-                            : "max-h-0 opacity-0 scale-95 pointer-events-none"
+                            ? "max-h-[250px] opacity-100 scale-100 pointer-events-auto border border-slate-800 p-1.5 mt-1"
+                            : "max-h-0 opacity-0 scale-95 pointer-events-none border-0 p-0 mt-0"
                         }`}
                       >
                         {(memoryMode === "twoPlayers"
                           ? [
                               { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                              { key: "5x6", label: t.boardSizeLabels["5x6"] },
                               { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                              { key: "6x8", label: t.boardSizeLabels["6x8"] }
+                              { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                              { key: "7x8", label: t.boardSizeLabels["7x8"] }
                             ]
                           : [
                               { key: "3x4", label: t.boardSizeLabels["3x4"] },
                               { key: "4x5", label: t.boardSizeLabels["4x5"] },
                               { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                              { key: "5x6", label: t.boardSizeLabels["5x6"] },
                               { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                              { key: "6x8", label: t.boardSizeLabels["6x8"] }
+                              { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                              { key: "7x8", label: t.boardSizeLabels["7x8"] }
                             ]
                         ).map((opt) => {
                           const isSelected = difficulty === opt.key;
@@ -4187,9 +4560,9 @@ export default function App() {
                                   }
                                 }
                               }}
-                              className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                              className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold transition-colors duration-150 flex items-center justify-between cursor-pointer ${
                                 isSelected
-                                  ? "bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 border-2 border-amber-300/85 shadow-[0_4px_12px_rgba(234,179,8,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4)] font-black"
+                                  ? "bg-amber-400 text-slate-950 border-2 border-amber-300 font-black shadow-sm"
                                   : isLocked
                                   ? "bg-slate-900 text-amber-300 border border-amber-500/40 hover:bg-amber-950/50"
                                   : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-slate-900/40 border border-transparent font-bold"
@@ -4227,7 +4600,7 @@ export default function App() {
               <div className="flex items-center justify-between border-t border-slate-800/60 pt-1.5 text-[10px] font-semibold text-slate-400">
                 <div className="flex items-center gap-3">
                   {memoryMode !== "twoPlayers" && memoryMode !== "vsBot" && memoryMode !== "solo" && (
-                    <div className={`flex items-center gap-1 bg-slate-950 border px-2 py-0.5 rounded-md ${memoryTimeLeft < 0 ? "border-rose-900/50" : "border-slate-850"}`}>
+                    <div className={`flex items-center gap-1 bg-slate-950 border px-2 py-0.5 rounded-md ${memoryTimeLeft < 0 ? "border-rose-900/50" : "border-slate-800"}`}>
                       <Clock className={`w-3 h-3 ${memoryTimeLeft <= 10 ? "text-rose-400 animate-pulse" : "text-indigo-400"}`} />
                       <span className={`font-mono font-black text-[10px] ${memoryTimeLeft <= 10 ? "text-rose-400 animate-pulse" : "text-slate-200"}`}>
                         {memoryTimeLeft < 0 ? `-${Math.abs(memoryTimeLeft)}s` : `${memoryTimeLeft}s`}
@@ -4252,7 +4625,7 @@ export default function App() {
             </div>
 
             {/* MEMORY CARDS BOARD GRID SYSTEM */}
-            <GameViewportFrame title="EMOJI BRAINPOP" variant="cyan">
+            <GameViewportFrame title="EMOJI BRAINPOP" equippedThemeId={equippedThemeId}>
               <div 
                 id="memory-board-card"
                 className={`${layoutConfig.memoryBoardCardClass} ${currentTheme.boardBorder || ''} transition-all duration-500 ease-in-out relative overflow-hidden h-full rounded-lg`}
@@ -4295,6 +4668,17 @@ export default function App() {
                 memoryBusy={memoryBusy}
                 soundOn={soundOn}
                 setSoundOn={setSoundOn}
+                isPortrait={isPortrait}
+                isMobileLandscape={isMobileLandscape}
+                isTabletLandscape={isTabletLandscape}
+                p1Score={p1Score}
+                p2Score={p2Score}
+                activePlayer={activePlayer}
+                botUsername={botUsername}
+                currentBotDifficulty={currentBotDifficulty}
+                consecutiveMatches={consecutiveMatches}
+                difficulty={difficulty}
+                memoryCards={memoryCards}
               />
 
 
@@ -4376,6 +4760,7 @@ export default function App() {
               {/* Pause Overlay for Memory Mode */}
               <PauseOverlay
                 isPaused={isPaused}
+                isMobileConfigOpen={isMobileConfigOpen}
                 setIsPaused={setIsPaused}
                 synth={synth}
                 t={t}
@@ -4420,17 +4805,26 @@ export default function App() {
               </div>
 
               {/* Combo notification overlay */}
-              {activeCombo && (
+              {activeCombos.length > 0 && (
                 <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center p-4">
-                  <div 
-                    key={activeCombo.id}
-                    className={`animate-combo flex flex-col items-center justify-center px-6 py-3.5 rounded-2xl border-2 shadow-[0_12px_36px_rgba(0,0,0,0.5)] whitespace-nowrap select-none ${activeCombo.glow}`}
-                  >
-                    <span className="text-[10px] font-black tracking-widest uppercase opacity-85">{activeCombo.label}</span>
-                    <span className={`text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r ${activeCombo.text} bg-clip-text text-transparent font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]`}>
-                      Combo x{activeCombo.count}
-                    </span>
-                  </div>
+                  {activeCombos.map((combo) => (
+                    <div
+                      key={combo.id}
+                      className="absolute flex items-center justify-center transition-all duration-300 pointer-events-none"
+                      style={{
+                        transform: `translate3d(${combo.offsetX}px, ${combo.offsetY}px, 0px)`,
+                      }}
+                    >
+                      <div 
+                        className={`animate-combo flex flex-col items-center justify-center px-6 py-3.5 rounded-2xl border-2 shadow-[0_12px_36px_rgba(0,0,0,0.5)] whitespace-nowrap select-none ${combo.glow}`}
+                      >
+                        <span className="text-[10px] font-black tracking-widest uppercase opacity-85">{combo.label}</span>
+                        <span className={`text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r ${combo.text} bg-clip-text text-transparent font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]`}>
+                          Combo x{combo.count}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -4463,21 +4857,27 @@ export default function App() {
                   consecutiveMatches={consecutiveMatches}
                   botUsername={botUsername}
                   currentBotDifficulty={currentBotDifficulty}
+                  vsBotTrophies={vsBotTrophies}
                   t={t}
+                  isPortrait={isPortrait}
+                  isMobileLandscape={isMobileLandscape}
+                  isTabletLandscape={isTabletLandscape}
                 />
                 
                 {/* Dynamically Centered Grid with Responsive Card Dimensions */}
-                <div ref={gridWrapperRef} className="flex-1 min-h-0 w-full h-full flex items-center justify-center overflow-hidden">
+                <div ref={gridWrapperRef} className="flex-1 min-h-0 w-full h-full flex items-center justify-center overflow-visible p-1">
                   <MemoryBoardGrid
                     memoryCards={memoryCards}
                     memoryCardSizing={memoryCardSizing}
                     memoryMatched={memoryMatched}
                     memoryFlipped={memoryFlipped}
+                    memoryMismatch={memoryMismatch}
                     memoryBusy={memoryBusy}
                     matchedByP1={matchedByP1}
                     memoryMode={memoryMode}
                     handleMemoryCardClick={handleMemoryCardClick}
                     equippedCardBackId={equippedCardBackId}
+                    equippedThemeId={equippedThemeId}
                     matchSessionId={matchSessionId}
                     tutorialStep={tutorialStep}
                     tutorialCardA={tutorialCardA}
@@ -4495,6 +4895,7 @@ export default function App() {
                 fadeCelebrationOut={fadeCelebrationOut}
                 showScoreSummary={showScoreSummary}
                 memoryMode={memoryMode}
+                botUsername={botUsername}
                 language={language}
                 currentTheme={currentTheme}
                 t={t}
@@ -4524,7 +4925,7 @@ export default function App() {
                       Emoji BrainPop
                     </span>
                     <span className="text-[8px] text-slate-600 font-medium tracking-wide mt-0.5">
-                      by hungcuong
+                      by Hung Cuong
                     </span>
                   </div>
                 </div>
@@ -4536,37 +4937,41 @@ export default function App() {
       </main>
 
       {/* SETTINGS MODAL / PANEL */}
-      <SettingsModal
-        isSettingsOpen={isSettingsOpen}
-        setIsSettingsOpen={setIsSettingsOpen}
-        currentTheme={currentTheme}
-        t={t}
-        synth={synth}
-        language={language}
-        changeLanguage={changeLanguage}
-        isLangDropdownOpen={isLangDropdownOpen}
-        setIsLangDropdownOpen={setIsLangDropdownOpen}
-        soundOn={soundOn}
-        setSoundOn={setSoundOn}
-      />
+      {isSettingsOpen && (
+        <SettingsModal
+          isSettingsOpen={isSettingsOpen}
+          setIsSettingsOpen={setIsSettingsOpen}
+          currentTheme={currentTheme}
+          t={t}
+          synth={synth}
+          language={language}
+          changeLanguage={changeLanguage}
+          isLangDropdownOpen={isLangDropdownOpen}
+          setIsLangDropdownOpen={setIsLangDropdownOpen}
+          soundOn={soundOn}
+          setSoundOn={setSoundOn}
+        />
+      )}
 
       {/* SHOP MODAL / PANEL */}
-      <ShopModal
-        isOpen={isShopOpen}
-        onClose={() => setIsShopOpen(false)}
-        language={language}
-        equippedEffect={equippedEffect}
-        onEquipEffect={handleSetEquippedEffect}
-        equippedCardBackId={equippedCardBackId}
-        onEquipCardBack={handleSetEquippedCardBack}
-        equippedThemeId={equippedThemeId}
-        onEquipTheme={handleSetEquippedTheme}
-        equippedMusicId={equippedMusicId}
-        onEquipMusic={handleSetEquippedMusic}
-        isMobileLandscape={isMobileLandscape}
-        highlightItemId={shopHighlightItemId}
-        onClearHighlight={() => setShopHighlightItemId(null)}
-      />
+      {isShopOpen && (
+        <ShopModal
+          isOpen={isShopOpen}
+          onClose={() => setIsShopOpen(false)}
+          language={language}
+          equippedEffect={equippedEffect}
+          onEquipEffect={handleSetEquippedEffect}
+          equippedCardBackId={equippedCardBackId}
+          onEquipCardBack={handleSetEquippedCardBack}
+          equippedThemeId={equippedThemeId}
+          onEquipTheme={handleSetEquippedTheme}
+          equippedMusicId={equippedMusicId}
+          onEquipMusic={handleSetEquippedMusic}
+          isMobileLandscape={isMobileLandscape}
+          highlightItemId={shopHighlightItemId}
+          onClearHighlight={() => setShopHighlightItemId(null)}
+        />
+      )}
 
       {/* GENTLE SNOW UNLOCK CONGRATULATION DIALOG */}
       <GentleSnowUnlockModal
@@ -4616,6 +5021,13 @@ export default function App() {
         newHighScoreValue={newHighScoreValue}
         t={t}
         synth={synth}
+        onClose={() => {
+          setShowHighScorePopup(false);
+          if (hasPendingGentleSnow) {
+            setHasPendingGentleSnow(false);
+            setShowGentleSnowModal(true);
+          }
+        }}
       />
 
       {/* 2 PLAYERS MATCH RECORD RESET CONFIRMATION */}
@@ -4633,6 +5045,19 @@ export default function App() {
         isWatchingAd={isWatchingAd}
         t={t}
       />
+
+      {/* ORIENTATION CHANGE SPINNER OVERLAY */}
+      {isOrienting && typeof document !== "undefined" && createPortal(
+        <div
+          id="orientation-change-spinner-overlay"
+          className="fixed inset-0 z-[999999] bg-slate-950/90 backdrop-blur-md flex items-center justify-center pointer-events-auto select-none transition-opacity duration-200 animate-fade-in"
+        >
+          <div className="flex flex-col items-center justify-center p-3.5 sm:p-4 rounded-2xl bg-slate-900/95 border border-amber-500/35 shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-3 border-amber-400/20 border-t-amber-400 animate-spin" />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
     </div>
   );

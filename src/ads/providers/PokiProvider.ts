@@ -1,7 +1,9 @@
 import { AdProvider, AdPlatform } from "../types";
+import { synth } from "../../audio";
 
 export class PokiProvider implements AdProvider {
   readonly name: AdPlatform = "poki";
+  private initPromise: Promise<void> | null = null;
 
   private get sdk(): any {
     return (window as any).PokiSDK;
@@ -11,7 +13,26 @@ export class PokiProvider implements AdProvider {
     return typeof (window as any).PokiSDK !== "undefined";
   }
 
+  public init(): Promise<void> {
+    if (this.initPromise) return this.initPromise;
+    const sdk = this.sdk;
+    if (sdk && typeof sdk.init === "function") {
+      this.initPromise = sdk
+        .init()
+        .then(() => {
+          console.log("[PokiProvider] PokiSDK initialized successfully");
+        })
+        .catch((err: any) => {
+          console.warn("[PokiProvider] PokiSDK init failed or adblocker active:", err);
+        });
+    } else {
+      this.initPromise = Promise.resolve();
+    }
+    return this.initPromise;
+  }
+
   gameLoadingFinished(): void {
+    this.init();
     const sdk = this.sdk;
     if (sdk && typeof sdk.gameLoadingFinished === "function") {
       try {
@@ -45,33 +66,42 @@ export class PokiProvider implements AdProvider {
   }
 
   async showRewardedAd(): Promise<boolean> {
+    await this.init();
     const sdk = this.sdk;
-    if (sdk && typeof sdk.rewardedBreak === "function") {
-      try {
+    synth.muteForAd();
+
+    try {
+      if (sdk && typeof sdk.rewardedBreak === "function") {
         const withReward = await sdk.rewardedBreak();
         return Boolean(withReward);
-      } catch (err) {
-        console.warn("[PokiProvider] rewardedBreak error, falling back to success:", err);
-        return true; // Fallback for local testing / adblocker
       }
+      // Fallback if PokiSDK is loaded but rewardedBreak function is unavailable
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      return true;
+    } catch (err) {
+      console.warn("[PokiProvider] rewardedBreak error, falling back to success:", err);
+      return true;
+    } finally {
+      synth.unmuteAfterAd();
     }
-    // Fallback if PokiSDK is loaded but rewardedBreak function is unavailable
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(true), 750);
-    });
   }
 
   async showCommercialAd(): Promise<boolean> {
+    await this.init();
     const sdk = this.sdk;
-    if (sdk && typeof sdk.commercialBreak === "function") {
-      try {
+    synth.muteForAd();
+
+    try {
+      if (sdk && typeof sdk.commercialBreak === "function") {
         await sdk.commercialBreak();
         return true;
-      } catch (err) {
-        console.warn("[PokiProvider] commercialBreak error:", err);
-        return false;
       }
+      return true;
+    } catch (err) {
+      console.warn("[PokiProvider] commercialBreak error:", err);
+      return false;
+    } finally {
+      synth.unmuteAfterAd();
     }
-    return true;
   }
 }

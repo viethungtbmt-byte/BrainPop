@@ -37,3 +37,40 @@ export const TRANSLATIONS = {
 } as const;
 
 export type Language = "vi" | "en" | "es" | "pt" | "tr" | "de" | "fr" | "it" | "ru" | "id" | "zh-TW" | "ja" | "ko" | "pl" | "nl" | "th";
+
+export const SUPPORTED_LANGUAGES: Language[] = [
+  "vi", "en", "es", "pt", "tr", "de", "fr", "it", "ru", "id", "zh-TW", "ja", "ko", "pl", "nl", "th"
+];
+
+export function getAutoDetectedLanguage(): Language {
+  if (typeof navigator === "undefined") return "en";
+
+  const rawLanguages: string[] = [];
+  if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
+    rawLanguages.push(...navigator.languages);
+  }
+  if (navigator.language) {
+    rawLanguages.push(navigator.language);
+  }
+
+  for (const raw of rawLanguages) {
+    if (!raw) continue;
+    const lower = raw.trim().toLowerCase();
+
+    // Chinese language family -> zh-TW
+    if (lower === "zh-tw" || lower === "zh-hant" || lower === "zh-hk" || lower === "zh-mo" || lower.startsWith("zh")) {
+      return "zh-TW";
+    }
+
+    // Direct exact match
+    const exactMatch = SUPPORTED_LANGUAGES.find((l) => l.toLowerCase() === lower);
+    if (exactMatch) return exactMatch;
+
+    // Primary language code match (e.g., "pt-BR" -> "pt", "de-DE" -> "de", "en-US" -> "en")
+    const primary = lower.split("-")[0];
+    const primaryMatch = SUPPORTED_LANGUAGES.find((l) => l.toLowerCase() === primary);
+    if (primaryMatch) return primaryMatch;
+  }
+
+  return "en";
+}

@@ -2,6 +2,15 @@ import { InventoryState, CosmeticEffectType } from './itemTypes';
 
 const STORAGE_KEY = 'emoji_brainpop_inventory';
 
+export const TEMPORARY_AD_ITEMS = [
+  'effect_bubbles',
+  'cardback_diamond',
+  'theme_winter',
+  'music_wellerman'
+];
+
+export const TEMPORARY_UNLOCK_DURATION_MS = 48 * 60 * 60 * 1000; // 48 hours
+
 export const DEFAULT_OWNED_IDS = [
   'cardback_circle',
   'theme_midnight_blue',
@@ -28,22 +37,76 @@ export function getInventoryState(): InventoryState {
     
     // Ensure default items are always owned
     const parsedOwned = Array.isArray(parsed.ownedItemIds) ? parsed.ownedItemIds : DEFAULT_OWNED_IDS;
-    const owned = Array.from(new Set([
+    let owned = Array.from(new Set([
       ...DEFAULT_OWNED_IDS,
       ...parsedOwned
     ])).filter((id: string) => id !== 'effect_sakura' && id !== 'effect_rain');
 
+    const itemUnlocksUntil: Record<string, number> = { ...(parsed.itemUnlocksUntil || {}) };
+    const now = Date.now();
+    let stateChanged = false;
+
+    // Check expiration for 48h temporary ad items
+    TEMPORARY_AD_ITEMS.forEach((itemId) => {
+      const until = itemUnlocksUntil[itemId] || 0;
+      if (until > 0 && now < until) {
+        if (!owned.includes(itemId)) {
+          owned.push(itemId);
+          stateChanged = true;
+        }
+      } else {
+        if (owned.includes(itemId)) {
+          owned = owned.filter(id => id !== itemId);
+          stateChanged = true;
+        }
+        if (itemUnlocksUntil[itemId] !== undefined) {
+          delete itemUnlocksUntil[itemId];
+          stateChanged = true;
+        }
+      }
+    });
+
+    let equippedEffectId = parsed.equippedEffectId !== undefined ? parsed.equippedEffectId : DEFAULT_STATE.equippedEffectId;
+    let equippedCardBackId = parsed.equippedCardBackId !== undefined ? parsed.equippedCardBackId : DEFAULT_STATE.equippedCardBackId;
+    let equippedThemeId = parsed.equippedThemeId !== undefined ? parsed.equippedThemeId : DEFAULT_STATE.equippedThemeId;
+    let equippedBackgroundId = parsed.equippedBackgroundId !== undefined ? parsed.equippedBackgroundId : DEFAULT_STATE.equippedBackgroundId;
+    let equippedMusicId = parsed.equippedMusicId !== undefined ? parsed.equippedMusicId : DEFAULT_STATE.equippedMusicId;
+
+    // Rule 4: If player is currently using an expired item, automatically switch back to default for that category
+    if (equippedEffectId === 'effect_bubbles' && !owned.includes('effect_bubbles')) {
+      equippedEffectId = null;
+      stateChanged = true;
+    }
+    if (equippedCardBackId === 'cardback_diamond' && !owned.includes('cardback_diamond')) {
+      equippedCardBackId = 'cardback_circle';
+      stateChanged = true;
+    }
+    if (equippedThemeId === 'theme_winter' && !owned.includes('theme_winter')) {
+      equippedThemeId = 'theme_midnight_blue';
+      stateChanged = true;
+    }
+    if (equippedMusicId === 'music_wellerman' && !owned.includes('music_wellerman')) {
+      equippedMusicId = 'music_none';
+      stateChanged = true;
+    }
+
+    if (equippedEffectId === 'effect_sakura' || equippedEffectId === 'effect_rain') {
+      equippedEffectId = null;
+      stateChanged = true;
+    }
+
     const state: InventoryState = {
       ownedItemIds: owned,
-      equippedEffectId: parsed.equippedEffectId !== undefined ? parsed.equippedEffectId : DEFAULT_STATE.equippedEffectId,
-      equippedCardBackId: parsed.equippedCardBackId !== undefined ? parsed.equippedCardBackId : DEFAULT_STATE.equippedCardBackId,
-      equippedThemeId: parsed.equippedThemeId !== undefined ? parsed.equippedThemeId : DEFAULT_STATE.equippedThemeId,
-      equippedBackgroundId: parsed.equippedBackgroundId !== undefined ? parsed.equippedBackgroundId : DEFAULT_STATE.equippedBackgroundId,
-      equippedMusicId: parsed.equippedMusicId !== undefined ? parsed.equippedMusicId : DEFAULT_STATE.equippedMusicId,
+      itemUnlocksUntil,
+      equippedEffectId,
+      equippedCardBackId,
+      equippedThemeId,
+      equippedBackgroundId,
+      equippedMusicId,
     };
-    
-    if (state.equippedEffectId === 'effect_sakura' || state.equippedEffectId === 'effect_rain') {
-      state.equippedEffectId = null;
+
+    if (stateChanged) {
+      saveInventoryState(state);
     }
     
     return state;
@@ -61,12 +124,26 @@ export function isItemOwned(itemId: string): boolean {
   return state.ownedItemIds.includes(itemId);
 }
 
+export function getItemUnlockTimeLeft(itemId: string): number {
+  if (!TEMPORARY_AD_ITEMS.includes(itemId)) return 0;
+  const state = getInventoryState();
+  const until = state.itemUnlocksUntil?.[itemId] || 0;
+  const remaining = until - Date.now();
+  return remaining > 0 ? remaining : 0;
+}
+
 export function unlockItem(itemId: string): void {
   const state = getInventoryState();
   if (!state.ownedItemIds.includes(itemId)) {
     state.ownedItemIds.push(itemId);
-    saveInventoryState(state);
   }
+  if (TEMPORARY_AD_ITEMS.includes(itemId)) {
+    if (!state.itemUnlocksUntil) {
+      state.itemUnlocksUntil = {};
+    }
+    state.itemUnlocksUntil[itemId] = Date.now() + TEMPORARY_UNLOCK_DURATION_MS;
+  }
+  saveInventoryState(state);
 }
 
 export function saveInventoryState(state: InventoryState): void {

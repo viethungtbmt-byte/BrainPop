@@ -1,4 +1,4 @@
-export type BotDifficulty = 0 | 1 | 2 | 3 | 4 | 5;
+export type BotDifficulty = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface CardMemoryItem {
   id: string; // The emoji/card value or unique identifier

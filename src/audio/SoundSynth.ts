@@ -239,8 +239,30 @@ export class SoundSynth {
   private musicInterval: any = null;
   private currentMusicId: string | null = null;
   private activeMusicNodes: any[] = [];
+  private preAdEnabledState: boolean = true;
 
   constructor() {}
+
+  /**
+   * Mute all game audio immediately during commercial / rewarded ad breaks
+   */
+  muteForAd(): void {
+    this.preAdEnabledState = this.enabled;
+    this.enabled = false;
+    if (this.ctx && this.ctx.state === "running") {
+      this.ctx.suspend().catch(() => {});
+    }
+  }
+
+  /**
+   * Restore game audio state after commercial / rewarded ad finishes or fails
+   */
+  unmuteAfterAd(): void {
+    this.enabled = this.preAdEnabledState;
+    if (this.enabled && this.ctx && this.ctx.state === "suspended") {
+      this.ctx.resume().catch(() => {});
+    }
+  }
 
   // Background Ambient Music Generator
   playMusic(trackId: string) {
@@ -660,42 +682,53 @@ export class SoundSynth {
   }
 
   private init() {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        this.ctx = new AudioCtx();
+    try {
+      if (!this.ctx) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          this.ctx = new AudioCtx();
+        }
       }
+      if (this.ctx && this.ctx.state === "suspended") {
+        this.ctx.resume().catch(() => {});
+      }
+    } catch (e) {
+      console.warn("SoundSynth init error:", e);
     }
   }
 
   // Soft tactile card click / flip sound
   playSelect() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
-    
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
-    
-    osc.type = "triangle"; // warmer/softer than pure sine or harsh square
-    osc.frequency.setValueAtTime(220, this.ctx.currentTime); // Low sweet note
-    osc.frequency.exponentialRampToValueAtTime(330, this.ctx.currentTime + 0.05); // Slight rise
-    
-    // Softer attack (not 0 instantly) and quick decay
-    gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.06); // 40-70ms duration
-    
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(800, this.ctx.currentTime); // filter out high clicks/harshness
-    
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.ctx.destination);
-    
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.065);
+    try {
+      this.init();
+      if (!this.ctx) return;
+      
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+      
+      osc.type = "triangle"; // warmer/softer than pure sine or harsh square
+      osc.frequency.setValueAtTime(220, this.ctx.currentTime); // Low sweet note
+      osc.frequency.exponentialRampToValueAtTime(330, this.ctx.currentTime + 0.05); // Slight rise
+      
+      // Softer attack (not 0 instantly) and quick decay
+      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.06); // 40-70ms duration
+      
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(800, this.ctx.currentTime); // filter out high clicks/harshness
+      
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.065);
+    } catch (e) {
+      console.warn("playSelect error:", e);
+    }
   }
 
   playConnect() {
@@ -875,73 +908,81 @@ export class SoundSynth {
   // High Score Celebration Sound (~400-600ms happy ascending melody)
   playHighScore() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const melody = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00]; // C5 to C7
-    melody.forEach((freq, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      const startTime = this.ctx!.currentTime + index * 0.055;
+      const melody = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00]; // C5 to C7
+      melody.forEach((freq, index) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        const startTime = this.ctx!.currentTime + index * 0.055;
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, startTime);
-      
-      if (index === melody.length - 1) {
-        // Vibrato & long sustain for the peak milestone note
-        osc.frequency.linearRampToValueAtTime(freq + 15, startTime + 0.22);
-        gain.gain.setValueAtTime(0.001, startTime);
-        gain.gain.linearRampToValueAtTime(0.12, startTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.38);
-      } else {
-        gain.gain.setValueAtTime(0.001, startTime);
-        gain.gain.linearRampToValueAtTime(0.08, startTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
-      }
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, startTime);
+        
+        if (index === melody.length - 1) {
+          // Vibrato & long sustain for the peak milestone note
+          osc.frequency.linearRampToValueAtTime(freq + 15, startTime + 0.22);
+          gain.gain.setValueAtTime(0.001, startTime);
+          gain.gain.linearRampToValueAtTime(0.12, startTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.38);
+        } else {
+          gain.gain.setValueAtTime(0.001, startTime);
+          gain.gain.linearRampToValueAtTime(0.08, startTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
+        }
 
-      osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
 
-      osc.start(startTime);
-      osc.stop(startTime + 0.4);
-    });
+        osc.start(startTime);
+        osc.stop(startTime + 0.4);
+      });
+    } catch (e) {
+      console.warn("playHighScore error:", e);
+    }
   }
 
   // Heroic, simple, short brassy fanfare (~500ms)
   playRankUp() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const notes = [392.00, 523.25, 659.25, 783.99, 1046.50]; // G4, C5, E5, G5, C6
-    notes.forEach((freq, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      const filter = this.ctx!.createBiquadFilter();
-      const startTime = this.ctx!.currentTime + index * 0.07;
+      const notes = [392.00, 523.25, 659.25, 783.99, 1046.50]; // G4, C5, E5, G5, C6
+      notes.forEach((freq, index) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        const filter = this.ctx!.createBiquadFilter();
+        const startTime = this.ctx!.currentTime + index * 0.07;
 
-      osc.type = "triangle"; // brass/heroic character
-      osc.frequency.setValueAtTime(freq, startTime);
+        osc.type = "triangle"; // brass/heroic character
+        osc.frequency.setValueAtTime(freq, startTime);
 
-      gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.linearRampToValueAtTime(0.1, startTime + 0.015);
-      
-      if (index === notes.length - 1) {
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
-      } else {
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
-      }
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.1, startTime + 0.015);
+        
+        if (index === notes.length - 1) {
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+        } else {
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
+        }
 
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(1200, startTime);
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(1200, startTime);
 
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.ctx!.destination);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx!.destination);
 
-      osc.start(startTime);
-      osc.stop(startTime + (index === notes.length - 1 ? 0.35 : 0.18));
-    });
+        osc.start(startTime);
+        osc.stop(startTime + (index === notes.length - 1 ? 0.35 : 0.18));
+      });
+    } catch (e) {
+      console.warn("playRankUp error:", e);
+    }
   }
 
   // Optimistic Victory Jingle (~700-900ms)
@@ -1132,28 +1173,32 @@ export class SoundSynth {
   // Confirm dialog (Cheerful quick rising dual-tone chime)
   playConfirm() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const notes = [783.99, 1046.50]; // G5 to C6
-    notes.forEach((freq, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      const startTime = this.ctx!.currentTime + index * 0.04;
+      const notes = [783.99, 1046.50]; // G5 to C6
+      notes.forEach((freq, index) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        const startTime = this.ctx!.currentTime + index * 0.04;
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, startTime);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, startTime);
 
-      gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.linearRampToValueAtTime(0.1, startTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.12);
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.1, startTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.12);
 
-      osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
 
-      osc.start(startTime);
-      osc.stop(startTime + 0.14);
-    });
+        osc.start(startTime);
+        osc.stop(startTime + 0.14);
+      });
+    } catch (e) {
+      console.warn("playConfirm error:", e);
+    }
   }
 }
 

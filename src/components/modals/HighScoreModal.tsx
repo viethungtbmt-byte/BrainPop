@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, Trophy } from "lucide-react";
+import { Sparkles, Trophy, X } from "lucide-react";
 import { PanelBackground } from "../PanelBackground";
 
 export interface HighScoreModalProps {
@@ -10,6 +10,7 @@ export interface HighScoreModalProps {
   synth: {
     playConfirm: () => void;
   };
+  onClose?: () => void;
 }
 
 export const HighScoreModal: React.FC<HighScoreModalProps> = ({
@@ -18,14 +19,28 @@ export const HighScoreModal: React.FC<HighScoreModalProps> = ({
   newHighScoreValue,
   t,
   synth,
+  onClose,
 }) => {
   if (!showHighScorePopup) return null;
+
+  const handleDismiss = () => {
+    try {
+      synth?.playConfirm?.();
+    } catch (e) {
+      console.warn("Audio confirm error:", e);
+    }
+    if (onClose) {
+      onClose();
+    } else {
+      setShowHighScorePopup(false);
+    }
+  };
 
   return (
     <div 
       id="highscore-popup-backdrop"
-      className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-fade-in-backdrop animate-duration-200 pointer-events-auto"
-      onClick={() => setShowHighScorePopup(false)}
+      className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[130] flex items-center justify-center p-4 animate-fade-in-backdrop animate-duration-200 pointer-events-auto touch-manipulation"
+      onClick={handleDismiss}
     >
       {/* Subtle sparkles/particles background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
@@ -57,6 +72,17 @@ export const HighScoreModal: React.FC<HighScoreModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <PanelBackground showTopBar={true} />
+
+        {/* Top-right Close X button */}
+        <button
+          type="button"
+          id="btn-close-highscore-modal"
+          onClick={handleDismiss}
+          className="absolute top-3 right-3 p-1.5 rounded-full bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors z-30 cursor-pointer touch-manipulation pointer-events-auto"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
         <div className="flex flex-col items-center gap-2">
           <div className="p-3 bg-emerald-500/20 border-2 border-emerald-400/40 rounded-full text-emerald-300 animate-bounce">
             <Trophy className="w-8 h-8" />
@@ -81,11 +107,8 @@ export const HighScoreModal: React.FC<HighScoreModalProps> = ({
 
         <button
           id="btn-highscore-ok"
-          onClick={() => {
-            synth.playConfirm();
-            setShowHighScorePopup(false);
-          }}
-          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-b from-emerald-400 to-[#10b981] text-slate-950 text-xs font-black uppercase tracking-wider shadow-md border-2 border-emerald-300/80 hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+          onClick={handleDismiss}
+          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-b from-emerald-400 to-[#10b981] text-slate-950 text-xs font-black uppercase tracking-wider shadow-md border-2 border-emerald-300/80 hover:brightness-105 active:scale-95 transition-all cursor-pointer touch-manipulation pointer-events-auto"
         >
           {t.okText}
         </button>

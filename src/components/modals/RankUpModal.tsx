@@ -40,10 +40,20 @@ export const RankUpModal: React.FC<RankUpModalProps> = ({
 }) => {
   if (!showRankUpPopup || !rankUpBadge) return null;
 
+  const handleDismiss = () => {
+    try {
+      synth?.playSelect?.();
+    } catch (e) {
+      console.warn("Audio select error:", e);
+    }
+    setShowRankUpPopup(false);
+  };
+
   return (
     <div 
       id="rank-up-backdrop"
-      className="absolute inset-0 bg-[#0d101b]/70 backdrop-blur-md z-[120] flex items-center justify-center p-4 animate-fade-in-backdrop pointer-events-auto"
+      className="fixed inset-0 bg-[#0d101b]/80 backdrop-blur-md z-[130] flex items-center justify-center p-4 animate-fade-in-backdrop pointer-events-auto touch-manipulation"
+      onClick={handleDismiss}
     >
       {/* Subtle sparkles/particles background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
@@ -75,6 +85,7 @@ export const RankUpModal: React.FC<RankUpModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <PanelBackground showTopBar={true} />
+
         <div className="flex flex-col items-center gap-1.5">
           <Sparkles className="w-6 h-6 text-amber-400 animate-spin-slow" />
           <h3 className="font-black text-xl sm:text-2xl text-amber-400 tracking-wider uppercase leading-none drop-shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
@@ -112,11 +123,8 @@ export const RankUpModal: React.FC<RankUpModalProps> = ({
         </div>
 
         <button
-          onClick={() => {
-            synth.playSelect();
-            setShowRankUpPopup(false);
-          }}
-          className={`w-full py-3 px-4 rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer`}
+          onClick={handleDismiss}
+          className={`w-full py-3 px-4 rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer touch-manipulation pointer-events-auto`}
         >
           {isRankPromotion ? t.awesomeText : t.okText}
         </button>

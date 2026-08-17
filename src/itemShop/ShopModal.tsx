@@ -13,7 +13,7 @@ import { COSMETIC_ITEMS } from './itemData';
 import { CosmeticEffectType, CosmeticItem } from './itemTypes';
 import { synth } from '../audio';
 import { TRANSLATIONS } from '../locales';
-import { getInventoryState, unlockItem } from './inventory';
+import { getInventoryState, unlockItem, getItemUnlockTimeLeft } from './inventory';
 import { adManager } from '../ads/AdManager';
 import { PanelBackground } from '../components/PanelBackground';
 
@@ -47,86 +47,86 @@ const SHOP_THEME_STYLES: Record<string, {
   textSecondary: string;
 }> = {
   theme_midnight_blue: {
-    dialogBg: 'bg-gradient-to-b from-[#1c244f]/95 via-[#141a3c]/95 to-[#0c102b]/95 border-2 border-[#5066c7]/60 shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(80,102,199,0.15)]',
-    sidebarBg: 'bg-gradient-to-b from-[#151c3e]/90 to-[#0e122b]/95 border-r border-white/10',
-    tabSelected: 'bg-gradient-to-r from-[#2c377a] to-[#394998] border-[#546bbf] text-cyan-300',
-    tabUnselected: 'bg-[#1d244d]/30 hover:bg-[#1d244d]/80 text-slate-300 hover:text-slate-100 border-transparent',
-    itemCardEquipped: 'bg-[#25326d]/70 border-cyan-500/80 shadow-[0_8px_20px_-2px_rgba(6,182,212,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
-    itemCardUnequipped: 'bg-[#1c2246]/60 hover:bg-[#202852]/90 border-slate-700/50 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]',
-    btnEquipped: 'bg-cyan-950/40 border border-cyan-500/40 text-cyan-300',
-    btnUnequipped: 'bg-gradient-to-b from-[#34448e] to-[#25326d] hover:from-[#3a4ea4] hover:to-[#2c3c7e] border border-[#546bbf]/40 text-slate-100',
+    dialogBg: 'bg-[#121838] border-2 border-[#5066c7]/60 shadow-xl',
+    sidebarBg: 'bg-[#0f1430] border-r border-slate-700/50',
+    tabSelected: 'bg-[#2b3778] border-[#546bbf] text-cyan-300 font-extrabold',
+    tabUnselected: 'bg-[#141a38] hover:bg-[#1c244c] text-slate-300 hover:text-slate-100 border-transparent',
+    itemCardEquipped: 'bg-[#25326d] border-2 border-cyan-400 text-slate-100',
+    itemCardUnequipped: 'bg-[#182046] hover:bg-[#202956] border border-slate-700/60 text-slate-200',
+    btnEquipped: 'bg-cyan-950/60 border border-cyan-500/50 text-cyan-300',
+    btnUnequipped: 'bg-[#2f3d80] hover:bg-[#384a9c] border border-[#546bbf]/40 text-slate-100',
     textPrimary: 'text-slate-100',
     textSecondary: 'text-slate-400',
   },
   theme_spring: {
-    dialogBg: 'bg-gradient-to-b from-[#341d2e]/95 via-[#241420]/95 to-[#170c14]/95 border-2 border-pink-500/50 shadow-[0_24px_60px_rgba(24,8,18,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(236,72,153,0.15)]',
-    sidebarBg: 'bg-gradient-to-b from-[#251522]/90 to-[#140b12]/95 border-r border-pink-900/40',
-    tabSelected: 'bg-gradient-to-r from-[#9d3a5b] to-[#be4b73] border-pink-400 text-pink-100',
-    tabUnselected: 'bg-[#331a28]/30 hover:bg-[#331a28]/80 text-pink-200/80 hover:text-pink-100 border-transparent',
-    itemCardEquipped: 'bg-[#422036]/80 border-emerald-400/80 shadow-[0_8px_20px_-2px_rgba(52,211,153,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
-    itemCardUnequipped: 'bg-[#2a1624]/70 hover:bg-[#391e31]/90 border-pink-900/40 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]',
-    btnEquipped: 'bg-emerald-950/40 border border-emerald-500/40 text-emerald-300',
-    btnUnequipped: 'bg-gradient-to-b from-[#be4b73] to-[#9d3a5b] hover:from-[#d25881] hover:to-[#aa4265] border border-pink-400/30 text-white',
+    dialogBg: 'bg-[#22121d] border-2 border-pink-500/50 shadow-xl',
+    sidebarBg: 'bg-[#170c14] border-r border-pink-900/40',
+    tabSelected: 'bg-[#9d3a5b] border-pink-400 text-pink-100 font-extrabold',
+    tabUnselected: 'bg-[#261421] hover:bg-[#361c2e] text-pink-200/80 hover:text-pink-100 border-transparent',
+    itemCardEquipped: 'bg-[#422036] border-2 border-emerald-400 text-pink-50',
+    itemCardUnequipped: 'bg-[#2a1624] hover:bg-[#391e31] border border-pink-900/40 text-pink-100',
+    btnEquipped: 'bg-emerald-950/60 border border-emerald-500/50 text-emerald-300',
+    btnUnequipped: 'bg-[#be4b73] hover:bg-[#d25881] border border-pink-400/30 text-white',
     textPrimary: 'text-pink-50',
     textSecondary: 'text-pink-200/70',
   },
   theme_summer: {
-    dialogBg: 'bg-gradient-to-b from-[#3a2e1d]/95 via-[#251d11]/95 to-[#17120a]/95 border-2 border-amber-500/50 shadow-[0_24px_60px_rgba(24,18,8,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(245,158,11,0.15)]',
-    sidebarBg: 'bg-gradient-to-b from-[#2b2215]/90 to-[#120e07]/95 border-r border-amber-900/40',
-    tabSelected: 'bg-gradient-to-r from-[#b45309] to-[#d97706] border-amber-400 text-amber-100 font-extrabold',
-    tabUnselected: 'bg-[#332817]/30 hover:bg-[#332817]/80 text-amber-200/80 hover:text-amber-100 border-transparent',
-    itemCardEquipped: 'bg-[#42331c]/80 border-amber-400/80 shadow-[0_8px_20px_-2px_rgba(245,158,11,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
-    itemCardUnequipped: 'bg-[#2a2114]/70 hover:bg-[#3a2d1b]/90 border-amber-900/40 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]',
-    btnEquipped: 'bg-sky-950/40 border border-sky-400/40 text-sky-300',
-    btnUnequipped: 'bg-gradient-to-b from-[#d97706] to-[#b45309] hover:from-[#f59e0b] hover:to-[#c25e09] border border-amber-400/30 text-slate-950 font-extrabold',
+    dialogBg: 'bg-[#241c10] border-2 border-amber-500/50 shadow-xl',
+    sidebarBg: 'bg-[#140f09] border-r border-amber-900/40',
+    tabSelected: 'bg-[#b45309] border-amber-400 text-amber-100 font-extrabold',
+    tabUnselected: 'bg-[#241b0d] hover:bg-[#362914] text-amber-200/80 hover:text-amber-100 border-transparent',
+    itemCardEquipped: 'bg-[#42331c] border-2 border-amber-400 text-amber-50',
+    itemCardUnequipped: 'bg-[#2a2114] hover:bg-[#3a2d1b] border border-amber-900/40 text-amber-100',
+    btnEquipped: 'bg-sky-950/60 border border-sky-400/50 text-sky-300',
+    btnUnequipped: 'bg-[#d97706] hover:bg-[#f59e0b] border border-amber-400/30 text-slate-950 font-extrabold',
     textPrimary: 'text-amber-50',
     textSecondary: 'text-amber-200/70',
   },
   theme_autumn: {
-    dialogBg: 'bg-gradient-to-b from-[#382618]/95 via-[#22160e]/95 to-[#150d08]/95 border-2 border-orange-500/50 shadow-[0_24px_60px_rgba(24,12,6,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(249,115,22,0.15)]',
-    sidebarBg: 'bg-gradient-to-b from-[#291b10]/90 to-[#100a06]/95 border-r border-orange-900/40',
-    tabSelected: 'bg-gradient-to-r from-[#9a3412] to-[#c2410c] border-orange-400 text-orange-100 font-extrabold',
-    tabUnselected: 'bg-[#301c10]/30 hover:bg-[#301c10]/80 text-orange-200/80 hover:text-orange-100 border-transparent',
-    itemCardEquipped: 'bg-[#402616]/80 border-orange-400/80 shadow-[0_8px_20px_-2px_rgba(234,88,12,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
-    itemCardUnequipped: 'bg-[#25170d]/70 hover:bg-[#382314]/90 border-orange-900/40 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]',
-    btnEquipped: 'bg-amber-950/40 border border-amber-500/40 text-amber-300',
-    btnUnequipped: 'bg-gradient-to-b from-[#c2410c] to-[#9a3412] hover:from-[#ea580c] hover:to-[#ad380b] border border-orange-400/30 text-white font-extrabold',
+    dialogBg: 'bg-[#22150c] border-2 border-orange-500/50 shadow-xl',
+    sidebarBg: 'bg-[#140d07] border-r border-orange-900/40',
+    tabSelected: 'bg-[#9a3412] border-orange-400 text-orange-100 font-extrabold',
+    tabUnselected: 'bg-[#24150a] hover:bg-[#361f0e] text-orange-200/80 hover:text-orange-100 border-transparent',
+    itemCardEquipped: 'bg-[#402616] border-2 border-orange-400 text-orange-50',
+    itemCardUnequipped: 'bg-[#25170d] hover:bg-[#382314] border border-orange-900/40 text-orange-100',
+    btnEquipped: 'bg-amber-950/60 border border-amber-500/50 text-amber-300',
+    btnUnequipped: 'bg-[#c2410c] hover:bg-[#ea580c] border border-orange-400/30 text-white font-extrabold',
     textPrimary: 'text-orange-50',
     textSecondary: 'text-orange-200/70',
   },
   theme_winter: {
-    dialogBg: 'bg-gradient-to-b from-[#1b2b42]/95 via-[#111c2c]/95 to-[#0a111b]/95 border-2 border-sky-400/50 shadow-[0_24px_60px_rgba(6,14,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(56,189,248,0.15)]',
-    sidebarBg: 'bg-gradient-to-b from-[#142032]/90 to-[#070e17]/95 border-r border-sky-900/40',
-    tabSelected: 'bg-gradient-to-r from-[#0369a1] to-[#0284c7] border-sky-300 text-white font-extrabold',
-    tabUnselected: 'bg-[#172436]/30 hover:bg-[#172436]/80 text-sky-200/80 hover:text-sky-100 border-transparent',
-    itemCardEquipped: 'bg-[#1e3047]/80 border-sky-300/80 shadow-[0_8px_20px_-2px_rgba(56,189,248,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
-    itemCardUnequipped: 'bg-[#121d2b]/70 hover:bg-[#1d2e45]/90 border-sky-900/40 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]',
-    btnEquipped: 'bg-cyan-950/40 border border-cyan-400/40 text-cyan-300',
-    btnUnequipped: 'bg-gradient-to-b from-[#0284c7] to-[#0369a1] hover:from-[#38bdf8] hover:to-[#0284c7] border border-sky-300/30 text-slate-950 font-extrabold',
+    dialogBg: 'bg-[#101b2a] border-2 border-sky-400/50 shadow-xl',
+    sidebarBg: 'bg-[#09101a] border-r border-sky-900/40',
+    tabSelected: 'bg-[#0369a1] border-sky-300 text-white font-extrabold',
+    tabUnselected: 'bg-[#111d2e] hover:bg-[#1b2d47] text-sky-200/80 hover:text-sky-100 border-transparent',
+    itemCardEquipped: 'bg-[#1e3047] border-2 border-sky-300 text-sky-50',
+    itemCardUnequipped: 'bg-[#121d2b] hover:bg-[#1d2e45] border border-sky-900/40 text-sky-100',
+    btnEquipped: 'bg-cyan-950/60 border border-cyan-400/50 text-cyan-300',
+    btnUnequipped: 'bg-[#0284c7] hover:bg-[#38bdf8] border border-sky-300/30 text-slate-950 font-extrabold',
     textPrimary: 'text-sky-50',
     textSecondary: 'text-sky-200/70',
   },
   theme_ocean: {
-    dialogBg: 'bg-gradient-to-b from-[#132f4a]/95 via-[#0c1f31]/95 to-[#06121d]/95 border-2 border-cyan-500/50 shadow-[0_24px_60px_rgba(5,16,26,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(6,182,212,0.15)]',
-    sidebarBg: 'bg-gradient-to-b from-[#0f243a]/90 to-[#05101a]/95 border-r border-cyan-900/40',
-    tabSelected: 'bg-gradient-to-r from-[#0284c7] to-[#06b6d4] border-cyan-300 text-white font-extrabold',
-    tabUnselected: 'bg-[#13283c]/30 hover:bg-[#13283c]/80 text-cyan-200/80 hover:text-cyan-100 border-transparent',
-    itemCardEquipped: 'bg-[#183552]/80 border-cyan-300/80 shadow-[0_8px_20px_-2px_rgba(34,211,238,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
-    itemCardUnequipped: 'bg-[#0d1e2f]/70 hover:bg-[#16304a]/90 border-cyan-900/40 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]',
-    btnEquipped: 'bg-cyan-950/40 border border-cyan-400/40 text-cyan-300',
-    btnUnequipped: 'bg-gradient-to-b from-[#06b6d4] to-[#0284c7] hover:from-[#22d3ee] hover:to-[#06b6d4] border border-cyan-300/30 text-slate-950 font-extrabold',
+    dialogBg: 'bg-[#0b1c2d] border-2 border-cyan-500/50 shadow-xl',
+    sidebarBg: 'bg-[#06111c] border-r border-cyan-900/40',
+    tabSelected: 'bg-[#0284c7] border-cyan-300 text-white font-extrabold',
+    tabUnselected: 'bg-[#0e2033] hover:bg-[#16304d] text-cyan-200/80 hover:text-cyan-100 border-transparent',
+    itemCardEquipped: 'bg-[#183552] border-2 border-cyan-300 text-cyan-50',
+    itemCardUnequipped: 'bg-[#0d1e2f] hover:bg-[#16304a] border border-cyan-900/40 text-cyan-100',
+    btnEquipped: 'bg-cyan-950/60 border border-cyan-400/50 text-cyan-300',
+    btnUnequipped: 'bg-[#06b6d4] hover:bg-[#22d3ee] border border-cyan-300/30 text-slate-950 font-extrabold',
     textPrimary: 'text-cyan-50',
     textSecondary: 'text-cyan-200/70',
   },
   theme_desert: {
-    dialogBg: 'bg-gradient-to-b from-[#38281d]/95 via-[#221811]/95 to-[#150e0a]/95 border-2 border-amber-600/50 shadow-[0_24px_60px_rgba(24,14,8,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2),inset_0_0_40px_rgba(217,119,6,0.15)]',
-    sidebarBg: 'bg-gradient-to-b from-[#291d15]/90 to-[#100a07]/95 border-r border-amber-900/40',
-    tabSelected: 'bg-gradient-to-r from-[#b45309] to-[#d97706] border-amber-400 text-amber-100 font-extrabold',
-    tabUnselected: 'bg-[#302117]/30 hover:bg-[#302117]/80 text-amber-200/80 hover:text-amber-100 border-transparent',
-    itemCardEquipped: 'bg-[#402b1f]/80 border-teal-400/80 shadow-[0_8px_20px_-2px_rgba(45,212,191,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
-    itemCardUnequipped: 'bg-[#261a13]/70 hover:bg-[#38271d]/90 border-amber-900/40 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]',
-    btnEquipped: 'bg-teal-950/40 border border-teal-400/40 text-teal-300',
-    btnUnequipped: 'bg-gradient-to-b from-[#d97706] to-[#b45309] hover:from-[#f59e0b] hover:to-[#d97706] border border-amber-400/30 text-white font-extrabold',
+    dialogBg: 'bg-[#211710] border-2 border-amber-600/50 shadow-xl',
+    sidebarBg: 'bg-[#130d09] border-r border-amber-900/40',
+    tabSelected: 'bg-[#b45309] border-amber-400 text-amber-100 font-extrabold',
+    tabUnselected: 'bg-[#241912] hover:bg-[#36251b] text-amber-200/80 hover:text-amber-100 border-transparent',
+    itemCardEquipped: 'bg-[#402b1f] border-2 border-teal-400 text-amber-50',
+    itemCardUnequipped: 'bg-[#261a13] hover:bg-[#38271d] border border-amber-900/40 text-amber-100',
+    btnEquipped: 'bg-teal-950/60 border border-teal-400/50 text-teal-300',
+    btnUnequipped: 'bg-[#d97706] hover:bg-[#f59e0b] border border-amber-400/30 text-white font-extrabold',
     textPrimary: 'text-amber-50',
     textSecondary: 'text-amber-200/70',
   },
@@ -173,6 +173,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
   onEquipTheme,
   equippedMusicId,
   onEquipMusic,
+  isMobileLandscape = false,
   highlightItemId,
   onClearHighlight,
 }) => {
@@ -196,12 +197,17 @@ export const ShopModal: React.FC<ShopModalProps> = ({
 
   const tStyle = SHOP_THEME_STYLES[equippedThemeId] || SHOP_THEME_STYLES.theme_midnight_blue;
 
+  if (!isOpen) return null;
+
   const handleWatchAdToUnlock = (item: CosmeticItem) => {
     if (watchingItemId) return;
     setWatchingItemId(item.id);
     synth.playSelect();
 
+    let handled = false;
     const onSuccess = () => {
+      if (handled) return;
+      handled = true;
       setWatchingItemId(null);
       unlockItem(item.id);
       setOwnedItemIds(prev => Array.from(new Set([...prev, item.id])));
@@ -220,8 +226,14 @@ export const ShopModal: React.FC<ShopModalProps> = ({
       synth.playRankUp();
     };
 
+    const adTimeout = setTimeout(() => {
+      onSuccess();
+    }, 35000);
+
     adManager.showRewardedAd()
       .then((withReward: boolean) => {
+        clearTimeout(adTimeout);
+        if (handled) return;
         if (withReward) {
           onSuccess();
         } else {
@@ -229,6 +241,8 @@ export const ShopModal: React.FC<ShopModalProps> = ({
         }
       })
       .catch((err: any) => {
+        clearTimeout(adTimeout);
+        if (handled) return;
         console.warn('Rewarded ad error in Shop:', err);
         onSuccess();
       });
@@ -238,7 +252,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
     const itemsToRender = [...filteredItems];
     
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 pb-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3 pb-1 sm:pb-2">
         {/* Special Default "None" option for Effects tab */}
         {activeCategory === 'effects' && (
           <div 
@@ -247,15 +261,15 @@ export const ShopModal: React.FC<ShopModalProps> = ({
               synth.playSuccess();
               onEquipEffect(null);
             }}
-            className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-200 flex flex-col justify-between items-center text-center cursor-pointer active:scale-95 active:translate-y-0 min-h-[112px] sm:min-h-[135px] h-auto relative overflow-hidden group -translate-y-[2px] hover:-translate-y-1.5 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-white/10 ${
+            className={`p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-colors duration-150 flex flex-col justify-between items-center text-center cursor-pointer min-h-[82px] sm:min-h-[135px] h-auto relative overflow-hidden group ${
               equippedEffect === null
-                ? `${tStyle.itemCardEquipped} border-cyan-500/80 shadow-[0_8px_20px_-2px_rgba(6,182,212,0.35),0_4px_12px_rgba(0,0,0,0.35)]`
+                ? `${tStyle.itemCardEquipped}`
                 : `${tStyle.itemCardUnequipped}`
             }`}
           >
             {/* Top row label */}
-            <div className="w-full flex items-center justify-between text-[8px] sm:text-[9px] font-black uppercase tracking-wider gap-1">
-              <span className="px-1.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/40 whitespace-nowrap">
+            <div className="w-full flex items-center justify-between text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider gap-1">
+              <span className="px-1.5 py-0.25 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/40 whitespace-nowrap">
                 {t.shopDefaultLabel || "DEFAULT"}
               </span>
               {equippedEffect === null ? (
@@ -266,16 +280,16 @@ export const ShopModal: React.FC<ShopModalProps> = ({
             </div>
 
             {/* Icon */}
-            <div className="my-1 text-2xl sm:text-3xl select-none filter drop-shadow-sm group-hover:scale-110 transition-transform duration-200">
+            <div className="my-0.5 sm:my-1 text-xl sm:text-3xl select-none filter drop-shadow-sm group-hover:scale-110 transition-transform duration-200">
               🚫
             </div>
 
             {/* Title & Action */}
             <div className="w-full flex flex-col items-center min-w-0">
-              <p className={`text-[11px] sm:text-xs font-black truncate w-full ${tStyle.textPrimary}`}>
+              <p className={`text-[10px] sm:text-xs font-black truncate w-full ${tStyle.textPrimary}`}>
                 {t.item_effect_none_name || "None"}
               </p>
-              <span className="text-[9px] sm:text-[10px] font-extrabold mt-0.5 text-cyan-400/90 whitespace-nowrap">
+              <span className="text-[8.5px] sm:text-[10px] font-extrabold mt-0.5 text-cyan-400/90 whitespace-nowrap">
                 {equippedEffect === null ? (t.equippedText || "Equipped") : (t.tapToEquipText || "Tap to Equip")}
               </span>
             </div>
@@ -329,33 +343,39 @@ export const ShopModal: React.FC<ShopModalProps> = ({
               key={item.id}
               id={`shop-item-${item.id}`}
               onClick={handleCardClick}
-              className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-200 flex flex-col justify-between items-center text-center cursor-pointer active:scale-95 active:translate-y-0 min-h-[112px] sm:min-h-[135px] h-auto relative overflow-hidden group -translate-y-[2px] hover:-translate-y-1.5 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-white/10 ${
+              className={`p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-colors duration-150 flex flex-col justify-between items-center text-center cursor-pointer min-h-[82px] sm:min-h-[135px] h-auto relative overflow-hidden group ${
                 isHighlighted
-                  ? 'ring-4 ring-amber-400 ring-offset-2 ring-offset-[#1b224c] animate-pulse shadow-[0_0_25px_rgba(245,158,11,0.85)] z-20 bg-[#25326d]'
+                  ? 'ring-2 ring-amber-400 border-amber-300 z-20 bg-[#25326d]'
                   : isEquipped
-                    ? `${tStyle.itemCardEquipped} border-cyan-500/80 shadow-[0_8px_20px_-2px_rgba(6,182,212,0.35),0_4px_12px_rgba(0,0,0,0.35)]`
+                    ? `${tStyle.itemCardEquipped}`
                     : isOwned
                       ? `${tStyle.itemCardUnequipped}`
-                      : 'bg-[#151936]/80 hover:bg-[#1d234d]/95 border-amber-500/35 hover:border-amber-400/70 shadow-[0_6px_16px_-2px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.45),0_4px_10px_rgba(0,0,0,0.3)]'
+                      : 'bg-[#151936] hover:bg-[#1d234d] border-amber-500/35 hover:border-amber-400/70'
               }`}
             >
               {/* Top row badge */}
-              <div className="w-full flex items-center justify-between text-[8px] sm:text-[9px] font-black uppercase tracking-wider gap-1">
+              <div className="w-full flex items-center justify-between text-[7.5px] sm:text-[9px] font-black uppercase tracking-wider gap-1">
                 {isDefault ? (
-                  <span className="px-1.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/40 whitespace-nowrap">
+                  <span className="px-1.5 py-0.25 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/40 whitespace-nowrap">
                     {t.shopDefaultLabel || "DEFAULT"}
                   </span>
                 ) : isOwned ? (
-                  <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[8px] font-black whitespace-nowrap">
-                    {t.unlockedText ? t.unlockedText.toUpperCase() : "UNLOCKED"}
-                  </span>
+                  item.isTemporary ? (
+                    <span className="px-1.5 py-0.25 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[7.5px] font-black whitespace-nowrap">
+                      ⏳ {Math.max(1, Math.ceil(getItemUnlockTimeLeft(item.id) / (3600 * 1000)))}H LEFT
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.25 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[7.5px] font-black whitespace-nowrap">
+                      {t.unlockedText ? t.unlockedText.toUpperCase() : "UNLOCKED"}
+                    </span>
+                  )
                 ) : item.id === 'effect_snow' ? (
-                  <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[8px] font-black whitespace-nowrap">
+                  <span className="px-1.5 py-0.25 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[7.5px] font-black whitespace-nowrap">
                     {t.gentleSnowLockedShopBadge || "3 CLASSIC GAMES"}
                   </span>
                 ) : (
-                  <span className="px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[8px] flex items-center gap-0.5 shadow-sm whitespace-nowrap">
-                    <Video className="w-2.5 h-2.5 shrink-0" /> {t.watchAdText ? t.watchAdText.toUpperCase() : "WATCH AD"}
+                  <span className="px-1.5 py-0.25 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[7.5px] flex items-center gap-0.5 shadow-sm whitespace-nowrap">
+                    <Video className="w-2.5 h-2.5 shrink-0" /> {item.isTemporary ? "AD (48H)" : (t.watchAdText ? t.watchAdText.toUpperCase() : "WATCH AD")}
                   </span>
                 )}
 
@@ -367,36 +387,36 @@ export const ShopModal: React.FC<ShopModalProps> = ({
               </div>
 
               {/* Center Icon */}
-              <div className="my-1 text-2xl sm:text-3xl select-none filter drop-shadow-sm group-hover:scale-110 transition-transform duration-200">
+              <div className="my-0.5 sm:my-1 text-xl sm:text-3xl select-none filter drop-shadow-sm group-hover:scale-110 transition-transform duration-200">
                 {item.icon}
               </div>
 
               {/* Bottom Title & Action label */}
               <div className="w-full flex flex-col items-center min-w-0">
-                <p className={`text-[11px] sm:text-xs font-black truncate w-full ${tStyle.textPrimary}`}>
+                <p className={`text-[10px] sm:text-xs font-black truncate w-full ${tStyle.textPrimary}`}>
                   {nameStr}
                 </p>
                 
                 {isWatchingThis ? (
-                  <div className="flex items-center gap-1 text-[9px] sm:text-[10px] font-extrabold text-amber-300 animate-pulse mt-0.5 whitespace-nowrap">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    <span>Loading Ad...</span>
+                  <div className="flex items-center gap-1 text-[8.5px] sm:text-[10px] font-extrabold text-amber-300 animate-pulse mt-0.5 whitespace-nowrap">
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                    <span>{t.loadingAdText || "Loading Ad..."}</span>
                   </div>
                 ) : isEquipped ? (
-                  <span className="text-[9px] sm:text-[10px] font-extrabold text-cyan-400/90 mt-0.5 whitespace-nowrap">
+                  <span className="text-[8.5px] sm:text-[10px] font-extrabold text-cyan-400/90 mt-0.5 whitespace-nowrap">
                     {t.equippedText || "Equipped"}
                   </span>
                 ) : isOwned ? (
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 group-hover:text-slate-200 mt-0.5 whitespace-nowrap">
+                  <span className="text-[8.5px] sm:text-[10px] font-bold text-slate-400 group-hover:text-slate-200 mt-0.5 whitespace-nowrap">
                     {t.tapToEquipText || "Tap to Equip"}
                   </span>
                 ) : item.id === 'effect_snow' ? (
-                  <span className="text-[9px] sm:text-[10px] font-extrabold text-cyan-300 mt-0.5 whitespace-nowrap">
+                  <span className="text-[8.5px] sm:text-[10px] font-extrabold text-cyan-300 mt-0.5 whitespace-nowrap">
                     {t.gentleSnowLockedShopText || "Complete 3 Classic Games"}
                   </span>
                 ) : (
-                  <span className="text-[9px] sm:text-[10px] font-extrabold text-amber-300 group-hover:text-amber-200 mt-0.5 flex items-center gap-1 whitespace-nowrap">
-                    <Video className="w-3 h-3" /> {t.unlockText || "Unlock"}
+                  <span className="text-[8.5px] sm:text-[10px] font-extrabold text-amber-300 group-hover:text-amber-200 mt-0.5 flex items-center gap-1 whitespace-nowrap">
+                    <Video className="w-2.5 h-2.5" /> {item.isTemporary ? "Unlock (48h)" : (t.unlockText || "Unlock")}
                   </span>
                 )}
               </div>
@@ -410,22 +430,18 @@ export const ShopModal: React.FC<ShopModalProps> = ({
   return (
     <div 
       id="shop-modal-backdrop"
-      className={`absolute inset-0 bg-[#0d101b]/80 md:backdrop-blur-md backdrop-blur-none z-[100] flex items-center justify-center transition-all duration-300 p-2 sm:p-4 ${
-        isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-      }`}
+      className="fixed inset-0 bg-[#0d101b]/80 md:backdrop-blur-md backdrop-blur-none z-[140] flex items-center justify-center transition-all duration-300 p-1.5 sm:p-4 landscape:p-1.5 h-[100dvh] max-h-[100dvh] overflow-hidden"
       onClick={onClose}
     >
       <div 
         id="shop-modal-content"
-        className={`border-2 flex flex-col relative overflow-hidden transition-all duration-300 transform w-[96%] max-w-4xl h-[90%] max-h-[600px] rounded-3xl ${
-          isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        } ${tStyle.dialogBg} ${tStyle.textPrimary}`}
+        className={`border-2 flex flex-col relative overflow-hidden transition-all duration-300 transform w-[96%] max-w-4xl h-[95dvh] sm:h-[90dvh] max-h-[96dvh] rounded-2xl sm:rounded-3xl ${tStyle.dialogBg} ${tStyle.textPrimary}`}
         onClick={(e) => e.stopPropagation()}
       >
         <PanelBackground showTopBar={true} />
         
         {/* Modal Header */}
-        <div className="flex-shrink-0 flex items-center justify-between border-b border-white/10 relative z-10 p-3.5 sm:p-4">
+        <div className="flex-shrink-0 flex items-center justify-between border-b border-white/10 relative z-10 p-2.5 sm:p-4">
           <div className="flex items-center gap-2.5">
             <div className="bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-xl text-white shadow-md p-1.5 sm:p-2">
               <Sparkles className="text-amber-300 animate-pulse w-4 h-4 sm:w-5 h-5" />
@@ -447,43 +463,59 @@ export const ShopModal: React.FC<ShopModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body (Split layout: Sidebar for tabs, Content grid for items) */}
-        <div className="flex-1 flex overflow-hidden min-h-0 relative z-10">
+        {/* Modal Body (Responsive layout: Top tabs on portrait/mobile, Sidebar on sm/landscape) */}
+        <div className={`flex-1 flex ${isMobileLandscape ? 'flex-row' : 'flex-col sm:flex-row'} overflow-hidden min-h-0 relative z-10`}>
           
-          {/* Left Navigation Tabs Sidebar */}
-          <div className={`border-r flex flex-col overflow-y-auto shrink-0 transition-all duration-300 ${tStyle.sidebarBg} border-white/10 w-[82px] sm:w-[160px] p-1.5 sm:p-3 gap-1.5 sm:gap-2`}>
-            {CATEGORIES.map((cat) => {
-              const Icon = cat.icon;
-              const isSelected = activeCategory === cat.id;
-              const labelText = (t as unknown as Record<string, string>)[cat.labelKey] || cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  id={`btn-shop-tab-${cat.id}`}
-                  onClick={() => {
-                    synth.playSelect();
-                    setActiveCategory(cat.id as ShopCategory);
-                  }}
-                  className={`w-full rounded-xl sm:rounded-2xl text-left font-extrabold flex items-center justify-between gap-1 transition-all cursor-pointer focus:outline-none relative border py-2 sm:py-3 px-1.5 sm:px-3 text-[10px] sm:text-xs ${
-                    isSelected
-                      ? `${tStyle.tabSelected} shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] font-black scale-[1.02]`
-                      : `${tStyle.tabUnselected}`
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Icon className={`shrink-0 ${isSelected ? "text-cyan-400" : "text-slate-400"} w-3.5 h-3.5 sm:w-4 sm:h-4`} />
-                    <span className="truncate leading-tight">{labelText}</span>
-                  </div>
-                  {isSelected && (
-                    <div className="absolute right-0 top-1/4 bottom-1/4 w-1 bg-cyan-400 rounded-l-md" />
-                  )}
-                </button>
-              );
-            })}
+          {/* Left/Top Navigation Tabs Bar */}
+          <div className={`shrink-0 border-b ${isMobileLandscape ? 'border-b-0 border-r w-[145px] sm:w-[170px]' : 'border-b sm:border-b-0 sm:border-r w-full sm:w-[170px]'} border-white/10 transition-all duration-300 ${tStyle.sidebarBg} p-1 sm:p-3 overflow-x-auto sm:overflow-y-auto`}>
+            <div className={`${isMobileLandscape ? 'flex flex-col' : 'grid grid-cols-4 sm:flex sm:flex-col'} gap-1 sm:gap-2 w-full`}>
+              {CATEGORIES.map((cat) => {
+                const Icon = cat.icon;
+                const isSelected = activeCategory === cat.id;
+                const labelText = (t as unknown as Record<string, string>)[cat.labelKey] || cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    id={`btn-shop-tab-${cat.id}`}
+                    onClick={() => {
+                      synth.playSelect();
+                      setActiveCategory(cat.id as ShopCategory);
+                    }}
+                    className={`w-full rounded-xl sm:rounded-2xl font-extrabold transition-colors cursor-pointer focus:outline-none relative border text-[10px] sm:text-xs ${
+                      isMobileLandscape 
+                        ? 'py-2.5 px-2.5 flex flex-row items-center justify-between text-left'
+                        : 'py-1 sm:py-2.5 px-1 sm:px-3 flex flex-col sm:flex-row items-center justify-center sm:justify-between text-center sm:text-left'
+                    } ${
+                      isSelected
+                        ? `${tStyle.tabSelected} font-black sm:scale-[1.01]`
+                        : `${tStyle.tabUnselected}`
+                    }`}
+                  >
+                    <div className={`flex ${isMobileLandscape ? 'flex-row' : 'flex-col sm:flex-row'} items-center gap-0.5 sm:gap-2 min-w-0 w-full sm:w-auto justify-center sm:justify-start`}>
+                      <Icon className={`shrink-0 ${isSelected ? "text-cyan-400" : "text-slate-400"} w-3.5 h-3.5 sm:w-4 sm:h-4`} />
+                      <span className="leading-tight text-[10px] sm:text-xs font-bold sm:font-black tracking-tight text-center sm:text-left break-words sm:truncate w-full sm:w-auto">
+                        {labelText}
+                      </span>
+                    </div>
+
+                    {isSelected && (
+                      <>
+                        {/* Horizontal bottom indicator bar for top tabs in portrait */}
+                        {!isMobileLandscape && (
+                          <div className="absolute bottom-0 inset-x-1.5 h-0.5 bg-cyan-400 rounded-t-md sm:hidden" />
+                        )}
+                        {/* Vertical right indicator bar for left sidebar in landscape/sm */}
+                        <div className={`absolute right-0 top-1/4 bottom-1/4 w-1 bg-cyan-400 rounded-l-md ${isMobileLandscape ? 'block' : 'hidden sm:block'}`} />
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Right Main Content Panel */}
-          <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+          {/* Main Content Panel */}
+          <div className="flex-1 overflow-y-auto p-1.5 sm:p-5">
             {renderUnifiedItems()}
           </div>
 

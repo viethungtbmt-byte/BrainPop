@@ -91,7 +91,7 @@ export const GameStartConfirmModal: React.FC<GameStartConfirmModalProps> = ({
   return (
     <div
       id="memory-confirm-backdrop"
-      className="absolute inset-0 bg-[#0d101b]/70 md:backdrop-blur-md backdrop-blur-none z-[110] flex items-center justify-center p-4 animate-fade-in-backdrop pointer-events-auto"
+      className="fixed inset-0 bg-[#0d101b]/80 backdrop-blur-md z-[130] flex items-center justify-center p-4 animate-fade-in-backdrop pointer-events-auto touch-manipulation"
       onClick={() => setShowMemoryConfirm(false)}
     >
       <div
@@ -119,14 +119,14 @@ export const GameStartConfirmModal: React.FC<GameStartConfirmModalProps> = ({
         {/* Selected Specs display as secondary helper details */}
         <div className="bg-[#1e2552]/70 rounded-2xl p-3 mb-6 border-2 border-[#3f509d]/40 text-xs flex justify-around shadow-[0_4px_10px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.12)]">
           <div className="flex flex-col items-center">
-            <span className="text-slate-300 font-black uppercase text-[9px] mb-0.5 tracking-wider">Mode</span>
+            <span className="text-slate-300 font-black uppercase text-[9px] mb-0.5 tracking-wider">{t.playModeLabel || "Mode"}</span>
             <span className="text-cyan-300 font-black uppercase text-[10px] tracking-wide">
-              {pendingMemoryMode === "solo" ? "Classic" : pendingMemoryMode === "vsBot" ? "Challenge" : "2 Players"}
+              {pendingMemoryMode === "solo" ? t.modeClassic : pendingMemoryMode === "twoPlayers" ? t.modeTwoPlayers : t.modeBattle}
             </span>
           </div>
           <div className="h-6 w-[2px] bg-[#3f509d]/40"></div>
           <div className="flex flex-col items-center">
-            <span className="text-slate-300 font-black uppercase text-[9px] mb-0.5 tracking-wider">Grid</span>
+            <span className="text-slate-300 font-black uppercase text-[9px] mb-0.5 tracking-wider">{t.challengeLevel?.replace(":", "") || "Grid"}</span>
             <span className="text-amber-300 font-black uppercase text-[10px] tracking-wide">
               {pendingMemoryMode === "vsBot"
                 ? t.boardSizeLabels[getBoardSizeForTrophies(vsBotTrophies)]
@@ -147,7 +147,7 @@ export const GameStartConfirmModal: React.FC<GameStartConfirmModalProps> = ({
                   setMemoryMode("vsBot");
                   setShowMemoryConfirm(false);
                 }}
-                className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-b from-cyan-400 to-indigo-500 text-white font-black text-xs tracking-wider transition-all duration-200 shadow-md border-2 border-cyan-300/50 active:scale-95 cursor-pointer text-center hover:brightness-105"
+                className="flex-1 py-3 px-4 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs tracking-wider transition-colors duration-150 shadow-none border-transparent cursor-pointer text-center"
               >
                 {t.resumeGameText}
               </button>
@@ -159,7 +159,7 @@ export const GameStartConfirmModal: React.FC<GameStartConfirmModalProps> = ({
                   const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
                   setDifficulty(finalDiff);
                   setMemoryMode("vsBot");
-                  generateMemoryGame(finalDiff);
+                  generateMemoryGame(finalDiff, "vsBot", true);
                   setShowMemoryConfirm(false);
                 }}
                 className="flex-1 py-3 px-4 rounded-2xl bg-[#34448e] hover:bg-[#3e51aa] text-slate-100 font-black text-xs tracking-wider transition-all duration-200 border-2 border-[#546bbf]/40 active:scale-95 cursor-pointer text-center"
@@ -212,7 +212,7 @@ export const GameStartConfirmModal: React.FC<GameStartConfirmModalProps> = ({
                   setShowMemoryConfirm(false);
                 }
               }}
-              className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-b from-[#ffcf40] to-[#e69d00] text-slate-950 font-black text-xs tracking-wider transition-all duration-200 shadow-md border-2 border-amber-300/80 active:scale-95 cursor-pointer hover:brightness-105 flex items-center justify-center gap-1.5"
+              className="flex-1 py-3 px-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs tracking-wider transition-colors duration-150 shadow-none border-transparent cursor-pointer flex items-center justify-center gap-1.5"
             >
               {!isBoardSizeUnlocked(pendingDifficulty, pendingMemoryMode) && (
                 <Video className="w-3.5 h-3.5 text-slate-950 shrink-0 fill-slate-950/20" />

@@ -83,7 +83,7 @@ export const MatchConnectionBoard: React.FC<MatchConnectionBoardProps> = ({
   return (
     <div id="match-container-wrapper" className="flex-1 min-h-0 flex flex-col justify-between text-slate-100 gap-2">
       {/* WORKSPACE BOARD CARD */}
-      <GameViewportFrame title="MATCH CONNECTION" variant="indigo">
+      <GameViewportFrame title="MATCH CONNECTION" equippedThemeId={equippedThemeId}>
         <div 
           id="match-board-card"
           className={`${layoutConfig.matchBoardCardClass} ${currentTheme.boardBorder || ''} transition-all duration-500 ease-in-out h-full rounded-lg`}

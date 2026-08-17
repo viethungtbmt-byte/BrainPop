@@ -47,9 +47,10 @@ export const COSMETIC_ITEMS: CosmeticItem[] = [
     descriptionKey: 'item_effect_bubbles_desc',
     type: 'effect',
     effectType: 'bubbles',
-    price: 180,
+    price: 0,
     rarity: 'rare',
-    icon: '🫧'
+    icon: '🫧',
+    isTemporary: true
   },
   {
     id: 'effect_stars',
@@ -131,7 +132,8 @@ export const COSMETIC_ITEMS: CosmeticItem[] = [
     category: 'cardBack',
     price: 0,
     rarity: 'legendary',
-    icon: '🔷'
+    icon: '🔷',
+    isTemporary: true
   },
   // THEMES
   {
@@ -180,9 +182,10 @@ export const COSMETIC_ITEMS: CosmeticItem[] = [
     descriptionKey: 'item_theme_winter_desc',
     type: 'theme',
     category: 'theme',
-    price: 150,
+    price: 0,
     rarity: 'rare',
-    icon: '❄️'
+    icon: '❄️',
+    isTemporary: true
   },
   {
     id: 'theme_ocean',
@@ -273,6 +276,7 @@ export const COSMETIC_ITEMS: CosmeticItem[] = [
     preview: 'wellerman',
     equipped: false,
     owned: false,
-    locked: true
+    locked: true,
+    isTemporary: true
   }
 ];

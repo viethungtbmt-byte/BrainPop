@@ -1,5 +1,5 @@
 import React from "react";
-import { Trophy, Sparkles, RefreshCw, Video, ArrowRight, Home } from "lucide-react";
+import { Trophy, Sparkles, RefreshCw, Video, ArrowRight, Home, X } from "lucide-react";
 import { PanelBackground } from "../PanelBackground";
 import { Language } from "../../locales";
 
@@ -11,6 +11,7 @@ export interface MemoryFinishedModalProps {
   fadeCelebrationOut: boolean;
   showScoreSummary: boolean;
   memoryMode: "vsBot" | "solo" | "twoPlayers";
+  botUsername?: string;
   language: Language;
   currentTheme: {
     dialogBg: string;
@@ -42,6 +43,15 @@ export interface MemoryFinishedModalProps {
   handleBackToMenu: () => void;
 }
 
+const formatBotWinString = (template: string, botName?: string) => {
+  const name = botName || "BOT";
+  return template
+    .replace(/BOT|AI|БОТ|บอท/gi, name)
+    .replace(/🤖/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
   memoryFinished,
   p1Score,
@@ -50,6 +60,7 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
   fadeCelebrationOut,
   showScoreSummary,
   memoryMode,
+  botUsername,
   language,
   currentTheme,
   t,
@@ -89,14 +100,25 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
     const celebrationText = getCelebrationText();
 
     return (
-      <div id="victory-celebration-backdrop" className="absolute inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 select-none bg-slate-950/50 backdrop-blur-md transition-all duration-300 pointer-events-auto">
+      <div id="victory-celebration-backdrop" className="fixed inset-0 z-[130] flex items-center justify-center p-2.5 sm:p-5 landscape:p-1.5 select-none bg-slate-950/70 backdrop-blur-md transition-all duration-300 pointer-events-auto touch-manipulation overflow-y-auto">
         <div 
           id="victory-celebration-panel" 
-          className={`w-full max-w-[320px] sm:max-w-sm ${currentTheme.dialogBg} border-2 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-center select-none overflow-hidden shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2)] transition-all duration-300 flex flex-col items-center justify-center relative ${
+          className={`w-full max-w-[320px] sm:max-w-sm ${currentTheme.dialogBg} border-2 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 landscape:p-3 text-center select-none overflow-y-auto max-h-[92vh] landscape:max-h-[96vh] shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2)] transition-all duration-300 flex flex-col items-center justify-center relative ${
             fadeCelebrationOut ? "animate-fade-out-celebration" : "animate-fade-in-backdrop"
           }`}
         >
           <PanelBackground showTopBar={true} />
+
+          {/* Top-right Close X button */}
+          <button
+            type="button"
+            id="btn-close-victory-celebration"
+            onClick={handleBackToMenu}
+            className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-300 hover:text-white transition-all z-50 cursor-pointer touch-manipulation pointer-events-auto shadow-md"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />
+          </button>
 
           {/* Radial soft screen glow */}
           <div className="absolute inset-0 victory-screen-glow animate-pulse-glow pointer-events-none z-0" />
@@ -177,7 +199,7 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                   {isDraw 
                     ? t.drawText
                     : memoryMode === "vsBot"
-                      ? (p1Winner ? t.youWinText : t.botWinsText)
+                      ? (p1Winner ? t.youWinText : formatBotWinString(t.botWinsText, botUsername))
                       : (p1Winner ? t.p1WinsText : t.p2WinsText)}
                 </h1>
                 
@@ -208,12 +230,23 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
 
   if (memoryMode === "twoPlayers" || memoryMode === "vsBot") {
     return (
-      <div id="memory-finished-2p-backdrop" className="absolute inset-0 z-40 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-slate-950/50 backdrop-blur-md animate-fade-in pointer-events-auto">
+      <div id="memory-finished-2p-backdrop" className="fixed inset-0 z-[130] flex items-center justify-center p-2 sm:p-4 md:p-6 landscape:p-1.5 bg-slate-950/80 backdrop-blur-md animate-fade-in pointer-events-auto touch-manipulation overflow-y-auto">
         <div 
           id="memory-finished-panel-2p" 
-          className={`w-full max-w-[340px] sm:max-w-sm md:max-w-md ${currentTheme.dialogBg} border-2 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 text-center shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2)] overflow-hidden transition-all duration-300 relative animate-score-summary-fade-in flex flex-col items-center justify-center gap-2.5 sm:gap-3`}
+          className={`w-full max-w-[340px] sm:max-w-sm md:max-w-md ${currentTheme.dialogBg} border-2 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 landscape:p-2.5 landscape:pt-3 text-center shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2)] overflow-y-auto max-h-[92vh] landscape:max-h-[98vh] transition-all duration-300 relative animate-score-summary-fade-in flex flex-col items-center justify-start gap-2.5 sm:gap-3 landscape:gap-1.5 pointer-events-auto`}
         >
           <PanelBackground showTopBar={true} />
+
+          {/* Top-right Close X button */}
+          <button
+            type="button"
+            id="btn-close-memory-finished-2p"
+            onClick={handleBackToMenu}
+            className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-300 hover:text-white transition-all z-50 cursor-pointer touch-manipulation pointer-events-auto shadow-md"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />
+          </button>
 
           {/* Embedded Style Tag for Fireworks animations */}
           <style>{`
@@ -271,90 +304,94 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
             })}
           </div>
 
-          <div className="flex flex-col items-center gap-2.5 sm:gap-3 max-w-sm w-full relative z-10">
-            {/* Trophy or Draw Icon */}
-            <div className={`p-2.5 sm:p-3 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.2)] ${
-              isDraw
-                ? "bg-amber-500/20 border-2 border-amber-400/50 text-amber-300"
-                : p1Winner
-                  ? "bg-blue-500/20 border-2 border-blue-400/50 text-blue-300"
-                  : "bg-rose-500/20 border-2 border-rose-400/50 text-rose-300"
-            }`}>
-              <Trophy className="w-7 h-7 sm:w-9 sm:h-9 animate-bounce" />
+          <div className="flex flex-col items-center gap-2 sm:gap-3 landscape:gap-1.5 max-w-sm w-full relative z-10 pt-1">
+            {/* Trophy Icon */}
+            <div className="p-2 sm:p-3 landscape:p-1 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.2)] bg-amber-500/20 border-2 border-amber-400/50 text-amber-300">
+              <Trophy className="w-6 h-6 sm:w-8 sm:h-8 landscape:w-5 landscape:h-5 animate-bounce" />
             </div>
 
             {/* Winner Announcement */}
             <div>
               {isDraw ? (
-                <h3 className="font-extrabold text-amber-300 text-lg sm:text-xl md:text-2xl tracking-tight leading-tight uppercase animate-pulse">
+                <h3 className="font-extrabold text-amber-300 text-base sm:text-xl md:text-2xl landscape:text-base tracking-tight leading-tight uppercase animate-pulse">
                   {t.drawTitleShort}
                 </h3>
               ) : p1Winner ? (
-                <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#bfe2ff] to-[#3b82f6] text-lg sm:text-xl md:text-2xl tracking-tight leading-tight uppercase drop-shadow-[0_2px_10px_rgba(59,130,246,0.5)]">
+                <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#bfe2ff] to-[#3b82f6] text-base sm:text-xl md:text-2xl landscape:text-base tracking-tight leading-tight uppercase drop-shadow-[0_2px_10px_rgba(59,130,246,0.5)]">
                   {memoryMode === "vsBot" ? t.youWinShort : t.p1WinsShort}
                 </h3>
               ) : (
-                <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#ffccd3] to-[#f43f5e] text-lg sm:text-xl md:text-2xl tracking-tight leading-tight uppercase drop-shadow-[0_2px_10px_rgba(244,63,94,0.5)]">
-                  {memoryMode === "vsBot" ? t.botWinsShort : t.p2WinsShort}
+                <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#ffccd3] to-[#f43f5e] text-base sm:text-xl md:text-2xl landscape:text-base tracking-tight leading-tight uppercase drop-shadow-[0_2px_10px_rgba(244,63,94,0.5)]">
+                  {memoryMode === "vsBot" ? formatBotWinString(t.botWinsShort, botUsername) : t.p2WinsShort}
                 </h3>
               )}
-              <p className={`text-[10px] sm:text-xs ${currentTheme.textSecondary} mt-0.5 font-bold tracking-wider uppercase transition-colors duration-300`}>
+              <p className={`text-[9px] sm:text-xs landscape:text-[9px] ${currentTheme.textSecondary} mt-0.5 font-bold tracking-wider uppercase transition-colors duration-300`}>
                 {isDraw ? t.bothPlayedBrilliantly : t.fantasticVictoryShort}
               </p>
             </div>
 
             {/* FINAL SCOREBOARD BREAKDOWN */}
-            <div className={`w-full ${currentTheme.cardBg} border-2 ${currentTheme.cardBorder} rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 flex flex-col gap-2 shadow-[0_8px_20px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)] transition-all duration-300`}>
-              <div className={`text-[9px] sm:text-[10px] ${currentTheme.textSecondary} font-extrabold tracking-wider uppercase border-b ${currentTheme.cardBorder} pb-1.5 transition-colors duration-300`}>
-                {t.finalScoresTitle}
+            <div className={`w-full ${currentTheme.cardBg} border-2 ${currentTheme.cardBorder} rounded-xl sm:rounded-2xl p-2 sm:p-3 landscape:p-1.5 flex flex-col gap-1.5 sm:gap-2 landscape:gap-1 shadow-[0_8px_20px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)] transition-all duration-300`}>
+              <div className={`text-[8.5px] sm:text-[10px] ${currentTheme.textSecondary} font-extrabold tracking-wider uppercase border-b ${currentTheme.cardBorder} pb-1 sm:pb-1.5 transition-colors duration-300 flex items-center justify-between`}>
+                <span>{t.finalScoresTitle}</span>
+                <span className="font-mono text-amber-400 font-bold">{p1Score} - {p2Score}</span>
               </div>
-              <div className="flex items-center justify-around gap-2 sm:gap-3">
+              
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-3 my-0.5">
                 {/* Player 1 final box */}
-                <div className={`flex-1 p-1.5 sm:p-2 rounded-lg sm:rounded-xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${
+                <div className={`p-1.5 sm:p-2.5 md:p-3 landscape:p-1 rounded-xl sm:rounded-2xl border-2 flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden text-center ${
                   p1Winner 
-                    ? "bg-blue-500/25 border-blue-400/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.3)]" 
+                    ? "bg-blue-500/25 border-blue-400/60 text-blue-200 shadow-[0_0_16px_rgba(59,130,246,0.35)]" 
                     : isDraw 
-                      ? "bg-amber-500/10 border-amber-400/30 text-amber-200"
-                      : `opacity-60 ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.textMuted}`
+                      ? "bg-amber-500/15 border-amber-400/40 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                      : `opacity-75 ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.textMuted}`
                 }`}>
-                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide">
+                  <div className="text-2xl sm:text-4xl landscape:text-lg mb-0.5 select-none filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.3)] animate-pop-bounce-float">
+                    {p1Winner ? "😁" : p2Winner ? "😭" : "😁"}
+                  </div>
+                  <span className="text-[9px] sm:text-xs landscape:text-[8.5px] font-black uppercase tracking-wider text-slate-100">
                     {memoryMode === "vsBot" ? t.labelYou : t.labelP1}
                   </span>
-                  <span className={`font-mono font-black text-base sm:text-lg mt-0.5 ${p1Winner ? "text-blue-200" : isDraw ? "text-amber-200" : currentTheme.textPrimary}`}>{p1Score}</span>
-                  {p1Winner && (
-                    <span className="text-[8px] font-black uppercase text-blue-400 mt-0.5 tracking-wider">
-                      {t.labelWinner}
-                    </span>
-                  )}
-                  {isDraw && (
-                    <span className="text-[8px] font-black uppercase text-amber-400 mt-0.5 tracking-wider">
-                      {t.labelDraw}
-                    </span>
-                  )}
+                  <span className={`font-mono font-black text-xl sm:text-3xl landscape:text-lg my-0 ${p1Winner ? "text-blue-300" : isDraw ? "text-amber-300" : currentTheme.textPrimary}`}>
+                    {p1Score}
+                  </span>
+                  <span className={`text-[7.5px] sm:text-[9px] landscape:text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full tracking-wider ${
+                    p1Winner 
+                      ? "bg-blue-500/30 text-blue-300 border border-blue-400/40" 
+                      : isDraw 
+                        ? "bg-amber-500/30 text-amber-300 border border-amber-400/40"
+                        : "bg-rose-950/40 text-rose-300/80 border border-rose-500/30"
+                  }`}>
+                    {p1Winner ? (t.labelWinner || "Winner") : p2Winner ? (t.labelLoser || "Loser") : (t.labelDraw || "Draw")}
+                  </span>
                 </div>
 
                 {/* Player 2 final box */}
-                <div className={`flex-1 p-1.5 sm:p-2 rounded-lg sm:rounded-xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${
+                <div className={`p-1.5 sm:p-2.5 md:p-3 landscape:p-1 rounded-xl sm:rounded-2xl border-2 flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden text-center ${
                   p2Winner 
-                    ? "bg-rose-500/25 border-rose-400/50 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.3)]" 
+                    ? "bg-rose-500/25 border-rose-400/60 text-rose-200 shadow-[0_0_16px_rgba(244,63,94,0.35)]" 
                     : isDraw 
-                      ? "bg-amber-500/10 border-amber-400/30 text-amber-200"
-                      : `opacity-60 ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.textMuted}`
+                      ? "bg-amber-500/15 border-amber-400/40 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                      : `opacity-75 ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.textMuted}`
                 }`}>
-                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide">
-                    {memoryMode === "vsBot" ? "BOT" : t.labelP2}
+                  <div className="text-2xl sm:text-4xl landscape:text-lg mb-0.5 select-none filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.3)] animate-pop-bounce-float">
+                    {p2Winner ? "😁" : p1Winner ? "😭" : "😁"}
+                  </div>
+                  <span className="text-[9px] sm:text-xs landscape:text-[8.5px] font-black uppercase tracking-wider text-slate-100">
+                    {memoryMode === "vsBot" ? (botUsername || "BOT") : t.labelP2}
                   </span>
-                  <span className={`font-mono font-black text-base sm:text-lg mt-0.5 ${p2Winner ? "text-rose-200" : isDraw ? "text-amber-200" : currentTheme.textPrimary}`}>{p2Score}</span>
-                  {p2Winner && (
-                    <span className="text-[8px] font-black uppercase text-rose-400 mt-0.5 tracking-wider">
-                      {t.labelWinner}
-                    </span>
-                  )}
-                  {isDraw && (
-                    <span className="text-[8px] font-black uppercase text-amber-400 mt-0.5 tracking-wider">
-                      {t.labelDraw}
-                    </span>
-                  )}
+                  <span className={`font-mono font-black text-xl sm:text-3xl landscape:text-lg my-0 ${p2Winner ? "text-rose-300" : isDraw ? "text-amber-300" : currentTheme.textPrimary}`}>
+                    {p2Score}
+                  </span>
+                  <span className={`text-[7.5px] sm:text-[9px] landscape:text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full tracking-wider ${
+                    p2Winner 
+                      ? "bg-rose-500/30 text-rose-300 border border-rose-400/40" 
+                      : isDraw 
+                        ? "bg-amber-500/30 text-amber-300 border border-amber-400/40"
+                        : "bg-rose-950/40 text-rose-300/80 border border-rose-500/30"
+                  }`}>
+                    {p2Winner ? (t.labelWinner || "Winner") : p1Winner ? (t.labelLoser || "Loser") : (t.labelDraw || "Draw")}
+                  </span>
                 </div>
               </div>
               
@@ -379,10 +416,10 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                 }
                 
                 return (
-                  <div className={`p-2 rounded-lg sm:rounded-xl flex flex-col items-center justify-center gap-0.5 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.2)] mt-0.5 transition-all duration-300 ${currentTheme.cardBg} border ${currentTheme.cardBorder}`}>
+                  <div className={`p-1.5 sm:p-2 landscape:p-1 rounded-lg sm:rounded-xl flex flex-col items-center justify-center gap-0.5 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.2)] mt-0.5 transition-all duration-300 ${currentTheme.cardBg} border ${currentTheme.cardBorder}`}>
                     <div className="flex items-center gap-1.5">
-                      <Trophy className={`w-4 h-4 ${isWin ? "text-amber-400 animate-pulse" : isLoss ? "text-rose-400" : "text-slate-500"}`} />
-                      <span className={`font-mono font-black text-sm sm:text-base transition-colors duration-300 ${
+                      <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                      <span className={`font-mono font-black text-xs sm:text-base landscape:text-xs transition-colors duration-300 ${
                         isWin 
                           ? (isThemeDark ? "text-emerald-300" : "text-emerald-700") 
                           : isLoss 
@@ -393,8 +430,8 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                       </span>
                     </div>
                     {challengeAdWatched && (
-                      <span className="text-[9px] font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-300" />
+                      <span className="text-[8px] sm:text-[9px] font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-300" />
                         {isWin ? (t.trophyRewardApplied2x || "×2 Trophy Reward Applied!") : isLoss ? (t.lossProtectionApplied50 || "50% Loss Protection Applied!") : (t.bonusTrophyGranted || "Bonus Trophy Granted!")}
                       </span>
                     )}
@@ -402,22 +439,23 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                 );
               })()}
 
-              <div className={`flex justify-between items-center text-[10px] sm:text-xs ${currentTheme.textSecondary} font-bold px-1 pt-1 border-t ${currentTheme.cardBorder} transition-colors duration-300`}>
+              <div className={`flex justify-between items-center text-[9px] sm:text-xs landscape:text-[8.5px] ${currentTheme.textSecondary} font-bold px-1 pt-0.5 border-t ${currentTheme.cardBorder} transition-colors duration-300`}>
                 <span>{t.totalMovesText}</span>
                 <span className={`font-mono font-black text-xs sm:text-sm transition-colors duration-300 ${currentTheme.accentText}`}>{memoryMoves}</span>
               </div>
             </div>
 
-            {/* Play Again and Back to Menu Buttons */}
+            {/* Play Again Button */}
             {memoryMode === "vsBot" ? (
-              <div className="flex flex-col items-center gap-1.5 w-full max-w-[280px]">
+              <div className="flex flex-col items-center gap-1 sm:gap-1.5 w-full max-w-[280px]">
                 {/* WATCH AD BUTTON FOR CHALLENGE MODE */}
                 {!challengeAdWatched ? (
                   <button
+                    type="button"
                     id="btn-watch-ad-challenge"
                     disabled={isWatchingAd}
                     onClick={() => handleWatchAdChallenge(p1Score - p2Score)}
-                    className="w-full px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-[10px] sm:text-xs tracking-wide shadow-[0_4px_16px_rgba(245,158,11,0.45)] active:scale-95 transition-all flex items-center justify-between cursor-pointer border border-amber-200/60 relative overflow-hidden group"
+                    className="w-full px-2.5 py-1.5 sm:py-2.5 landscape:py-1 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-[9.5px] sm:text-xs tracking-wide shadow-[0_4px_16px_rgba(245,158,11,0.45)] active:scale-95 transition-all flex items-center justify-between cursor-pointer border border-amber-200/60 relative overflow-hidden group touch-manipulation pointer-events-auto"
                   >
                     <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 pointer-events-none" />
                     {isWatchingAd ? (
@@ -432,7 +470,7 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                             <Video className="w-3.5 h-3.5" />
                           </div>
                           <div className="flex flex-col items-start leading-tight text-left">
-                            <span className="font-black text-[10px] sm:text-xs text-slate-950">
+                            <span className="font-black text-[9.5px] sm:text-xs text-slate-950">
                               {p1Score > p2Score
                                 ? (t.watchAdDoubleTrophies ? t.watchAdDoubleTrophies(p1Score - p2Score) : `×2 Trophies (+${p1Score - p2Score})`)
                                 : p1Score < p2Score
@@ -449,39 +487,32 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                     )}
                   </button>
                 ) : (
-                  <div className="w-full px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-[10px] sm:text-xs flex items-center justify-center gap-1.5 shadow-inner">
+                  <div className="w-full px-2.5 py-1 sm:py-2 rounded-xl sm:rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-[9.5px] sm:text-xs flex items-center justify-center gap-1.5 shadow-inner">
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                     <span>{t.adRewardApplied || "Ad Reward Applied! 🎉"}</span>
                   </div>
                 )}
 
                 <button
+                  type="button"
                   id="btn-play-again-vsbot"
                   onClick={() => { synth.playSelect(); generateMemoryGame(difficulty); }}
-                  className={`w-full px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
+                  className={`w-full px-3 py-1.5 sm:py-2.5 landscape:py-1.5 rounded-xl sm:rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs landscape:text-[11px] tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation pointer-events-auto`}
                 >
                   <span>{t.playAgainText}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <div className="w-full max-w-[280px]">
                 <button
+                  type="button"
                   id="btn-play-again-2p"
                   onClick={() => { synth.playSelect(); generateMemoryGame(difficulty); }}
-                  className={`flex-1 px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
+                  className={`w-full px-3 py-1.5 sm:py-3 landscape:py-1.5 rounded-xl sm:rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs sm:text-sm tracking-wide active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer touch-manipulation pointer-events-auto shadow-md hover:shadow-lg`}
                 >
                   <span>{t.playAgainText}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-
-                <button
-                  id="btn-back-menu-2p"
-                  onClick={handleBackToMenu}
-                  className={`flex-1 px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl ${currentTheme.buttonSecondary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
-                >
-                  <Home className="w-3.5 h-3.5" />
-                  <span>{t.backToMenuText}</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -492,64 +523,75 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
   }
 
   // Solo mode Victory Screen
-  const baseScore = (memoryCards.length * 10) / 2;
-  const efficiencyScore = Math.max(0, 1000 - memoryMoves * 10) / 10;
-  const timeBonus = (memoryTimeLeft > 0 ? memoryTimeLeft * 20 : 0) / 5;
-  const totalLevelScore = Math.round(baseScore + efficiencyScore + timeBonus);
+  const baseScore = Math.round((memoryCards.length * 1) / 2);
+  const efficiencyScore = Math.round(Math.max(0, 1000 - memoryMoves * 10) / 100);
+  const timeBonus = Math.round((memoryTimeLeft > 0 ? memoryTimeLeft * 2 : 0) / 5);
+  const totalLevelScore = baseScore + efficiencyScore + timeBonus;
 
   return (
-    <div id="memory-finished-backdrop" className="absolute inset-0 z-40 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-slate-950/50 backdrop-blur-md animate-fade-in pointer-events-auto">
+    <div id="memory-finished-backdrop" className="fixed inset-0 z-[130] flex items-center justify-center p-2 sm:p-4 md:p-6 landscape:p-1.5 bg-slate-950/80 backdrop-blur-md animate-fade-in pointer-events-auto touch-manipulation overflow-y-auto">
       <div 
         id="memory-finished-panel" 
-        className={`w-full max-w-[340px] sm:max-w-sm md:max-w-md ${currentTheme.dialogBg} border-2 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 text-center shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2)] overflow-hidden transition-all duration-300 relative animate-score-summary-fade-in flex flex-col items-center justify-center gap-2.5 sm:gap-3`}
+        className={`w-full max-w-[340px] sm:max-w-sm md:max-w-md ${currentTheme.dialogBg} border-2 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 landscape:p-2.5 landscape:pt-3 text-center shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2)] overflow-y-auto max-h-[92vh] landscape:max-h-[98vh] transition-all duration-300 relative animate-score-summary-fade-in flex flex-col items-center justify-start gap-2.5 sm:gap-3 landscape:gap-1.5 pointer-events-auto`}
       >
         <PanelBackground showTopBar={true} />
 
-        <div className="flex flex-col items-center gap-2.5 sm:gap-3 max-w-sm w-full relative z-10">
-          <div className="p-2.5 sm:p-3 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.2)] bg-amber-500/20 border-2 border-amber-400/50 text-amber-300">
-            <Trophy className="w-7 h-7 sm:w-9 sm:h-9 animate-bounce" />
+        {/* Top-right Close X button */}
+        <button
+          type="button"
+          id="btn-close-memory-finished-solo"
+          onClick={handleBackToMenu}
+          className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-300 hover:text-white transition-all z-50 cursor-pointer touch-manipulation pointer-events-auto shadow-md"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />
+        </button>
+
+        <div className="flex flex-col items-center gap-2 sm:gap-3 landscape:gap-1.5 max-w-sm w-full relative z-10 pt-1">
+          <div className="p-2 sm:p-3 landscape:p-1 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.2)] bg-amber-500/20 border-2 border-amber-400/50 text-amber-300">
+            <Trophy className="w-6 h-6 sm:w-8 sm:h-8 landscape:w-5 landscape:h-5 animate-bounce" />
           </div>
 
           <div>
-            <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#fff2a3] via-[#ffcf40] to-[#e69d00] text-lg sm:text-xl md:text-2xl tracking-tight leading-tight drop-shadow-[0_2px_10px_rgba(230,157,0,0.4)]">
+            <h3 className="font-black text-transparent bg-clip-text bg-gradient-to-b from-[#fff2a3] via-[#ffcf40] to-[#e69d00] text-base sm:text-xl md:text-2xl landscape:text-base tracking-tight leading-tight drop-shadow-[0_2px_10px_rgba(230,157,0,0.4)]">
               {t.rewardDialogTitle || t.memoryWinTitle}
             </h3>
-            <p className={`text-[10px] sm:text-xs ${currentTheme.textSecondary} mt-0.5 font-bold leading-tight transition-colors duration-300`}>
+            <p className={`text-[9px] sm:text-xs landscape:text-[9px] ${currentTheme.textSecondary} mt-0.5 font-bold leading-tight transition-colors duration-300`}>
               {t.memoryWinDesc(memoryMoves)}
             </p>
           </div>
 
           {/* SCOREBOARD BREAKDOWN */}
-          <div className={`w-full ${currentTheme.cardBg} border-2 ${currentTheme.cardBorder} rounded-xl sm:rounded-2xl p-2.5 sm:p-3 text-left text-[10px] sm:text-xs space-y-1.5 font-sans shadow-[0_8px_20px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)] transition-all duration-300`}>
-            <div className={`flex justify-between items-center ${currentTheme.textSecondary} pb-1.5 border-b ${currentTheme.cardBorder} transition-colors duration-300`}>
-              <span className="font-black uppercase tracking-wider text-[9px] sm:text-[10px]">{t.scoringBreakdown}</span>
-              <span className="text-amber-400 font-extrabold text-[10px] sm:text-[11px] font-mono tracking-wider">{t.boardSizeLabels[difficulty as keyof typeof t.boardSizeLabels] || difficulty}</span>
+          <div className={`w-full ${currentTheme.cardBg} border-2 ${currentTheme.cardBorder} rounded-xl sm:rounded-2xl p-2.5 sm:p-3 landscape:p-2 text-left text-[10px] sm:text-xs space-y-1 sm:space-y-1.5 font-sans shadow-[0_8px_20px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)] transition-all duration-300`}>
+            <div className={`flex justify-between items-center ${currentTheme.textSecondary} pb-1 border-b ${currentTheme.cardBorder} transition-colors duration-300`}>
+              <span className="font-black uppercase tracking-wider text-[8.5px] sm:text-[10px]">{t.scoringBreakdown}</span>
+              <span className="text-amber-400 font-extrabold text-[9.5px] sm:text-[11px] font-mono tracking-wider">{t.boardSizeLabels[difficulty as keyof typeof t.boardSizeLabels] || difficulty}</span>
             </div>
 
-            <div className="flex justify-between items-center font-bold">
+            <div className="flex justify-between items-center font-bold text-[9.5px] sm:text-xs">
               <span className={`transition-colors duration-300 ${currentTheme.textSecondary}`}>{t.baseMatchPoints}:</span>
               <span className={`font-mono ${currentTheme.textPrimary} font-black transition-colors duration-300`}>+{baseScore}</span>
             </div>
 
-            <div className="flex justify-between items-center font-bold">
+            <div className="flex justify-between items-center font-bold text-[9.5px] sm:text-xs">
               <span className={`transition-colors duration-300 ${currentTheme.textSecondary}`}>
                 {t.efficiencyBonus}:
               </span>
               <span className={`font-mono ${currentTheme.textPrimary} font-black transition-colors duration-300`}>+{efficiencyScore}</span>
             </div>
 
-            <div className="flex justify-between items-center font-bold">
+            <div className="flex justify-between items-center font-bold text-[9.5px] sm:text-xs">
               <span className={`transition-colors duration-300 ${currentTheme.textSecondary}`}>
                 {t.timeBonusText}:
               </span>
               <span className={`font-mono ${currentTheme.textPrimary} font-black transition-colors duration-300`}>+{timeBonus}</span>
             </div>
 
-            <div className={`flex justify-between items-center pt-2 border-t ${currentTheme.cardBorder} font-black text-xs sm:text-sm transition-colors duration-300 ${isThemeDark ? "text-emerald-300" : "text-emerald-700"}`}>
+            <div className={`flex justify-between items-center pt-1.5 border-t ${currentTheme.cardBorder} font-black text-xs sm:text-sm transition-colors duration-300 ${isThemeDark ? "text-emerald-300" : "text-emerald-700"}`}>
               <span>{t.levelScoreTotal}:</span>
               <div className="flex items-center gap-1.5">
                 {classicAdWatched && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[9px] uppercase font-black tracking-wider animate-bounce border border-amber-400/40">
+                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[8.5px] uppercase font-black tracking-wider animate-bounce border border-amber-400/40">
                     {t.x2DoubledTag || "×2 Score! 🎉"}
                   </span>
                 )}
@@ -560,14 +602,15 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1.5 w-full max-w-[280px]">
+          <div className="flex flex-col items-center gap-1 sm:gap-1.5 w-full max-w-[280px]">
             {/* WATCH AD BUTTON FOR CLASSIC MODE */}
             {!classicAdWatched ? (
               <button
+                type="button"
                 id="btn-watch-ad-classic"
                 disabled={isWatchingAd}
                 onClick={() => handleWatchAdClassic(totalLevelScore)}
-                className="w-full px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-[10px] sm:text-xs tracking-wide shadow-[0_4px_16px_rgba(245,158,11,0.45)] active:scale-95 transition-all flex items-center justify-between cursor-pointer border border-amber-200/60 relative overflow-hidden group"
+                className="w-full px-2.5 py-1.5 sm:py-2.5 landscape:py-1 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-[9.5px] sm:text-xs tracking-wide shadow-[0_4px_16px_rgba(245,158,11,0.45)] active:scale-95 transition-all flex items-center justify-between cursor-pointer border border-amber-200/60 relative overflow-hidden group touch-manipulation pointer-events-auto"
               >
                 <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 pointer-events-none" />
                 {isWatchingAd ? (
@@ -582,7 +625,7 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                         <Video className="w-3.5 h-3.5" />
                       </div>
                       <div className="flex flex-col items-start leading-tight text-left">
-                        <span className="font-black text-[10px] sm:text-xs text-slate-950">
+                        <span className="font-black text-[9.5px] sm:text-xs text-slate-950">
                           {t.watchAdDoubleScore || "×2 Final Score"}
                         </span>
                         <span className="text-[8px] sm:text-[9px] font-extrabold text-slate-900/80 uppercase tracking-wider">
@@ -595,16 +638,17 @@ export const MemoryFinishedModal: React.FC<MemoryFinishedModalProps> = ({
                 )}
               </button>
             ) : (
-              <div className="w-full px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-[10px] sm:text-xs flex items-center justify-center gap-1.5 shadow-inner">
+              <div className="w-full px-2.5 py-1 sm:py-2 rounded-xl sm:rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-[9.5px] sm:text-xs flex items-center justify-center gap-1.5 shadow-inner">
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                 <span>{t.adScoreRewardApplied || t.adRewardApplied || "×2 Score Reward Applied! 🎉"}</span>
               </div>
             )}
 
             <button
+              type="button"
               id="btn-play-again-memory"
               onClick={() => { synth.playSelect(); generateMemoryGame(difficulty); }}
-              className={`px-4 py-2 sm:py-2.5 w-full rounded-xl sm:rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer`}
+              className={`px-3 py-1.5 sm:py-2.5 landscape:py-1.5 w-full rounded-xl sm:rounded-2xl ${currentTheme.buttonPrimary} font-black text-xs tracking-wide active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation pointer-events-auto`}
             >
               {t.newGame}
               <ArrowRight className="w-3.5 h-3.5" />

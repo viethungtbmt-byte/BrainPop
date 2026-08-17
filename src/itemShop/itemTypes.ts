@@ -26,10 +26,12 @@ export interface CosmeticItem {
   locked?: boolean;
   preview?: string;
   isDefault?: boolean;
+  isTemporary?: boolean;
 }
 
 export interface InventoryState {
   ownedItemIds: string[];
+  itemUnlocksUntil?: Record<string, number>;
   equippedEffectId: string | null;
   equippedCardBackId: string | null;
   equippedThemeId: string | null;

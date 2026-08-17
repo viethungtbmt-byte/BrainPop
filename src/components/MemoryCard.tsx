@@ -11,6 +11,7 @@ interface MemoryCardProps {
   isMatchedByP1?: boolean;
   onClick: () => void;
   equippedCardBackId?: string;
+  equippedThemeId?: string;
   language?: string;
   isTutorialTarget?: boolean;
 }
@@ -40,15 +41,89 @@ const getCardRank = (emoji: string) => {
   return ranks[Math.abs(hash) % ranks.length];
 };
 
-const getCardBackStyles = (id: string = "cardback_circle") => {
+const getCardBackStyles = (
+  id: string = "cardback_circle",
+  themeId: string = "theme_midnight_blue"
+) => {
+  const getThemeColors = (tId: string) => {
+    switch (tId) {
+      case "theme_spring":
+        return {
+          border: "border-pink-500 hover:border-pink-400",
+          stroke: "#ec4899",
+          patternColor: "rgba(236, 72, 153, 0.14)",
+          patternColor2: "rgba(236, 72, 153, 0.07)",
+          emblemColor: "#be185d",
+          shadow: "rgba(236, 72, 153, 0.25)",
+        };
+      case "theme_summer":
+        return {
+          border: "border-amber-500 hover:border-amber-400",
+          stroke: "#f59e0b",
+          patternColor: "rgba(245, 158, 11, 0.14)",
+          patternColor2: "rgba(245, 158, 11, 0.07)",
+          emblemColor: "#b45309",
+          shadow: "rgba(245, 158, 11, 0.25)",
+        };
+      case "theme_autumn":
+        return {
+          border: "border-orange-500 hover:border-orange-400",
+          stroke: "#f97316",
+          patternColor: "rgba(249, 115, 22, 0.14)",
+          patternColor2: "rgba(249, 115, 22, 0.07)",
+          emblemColor: "#c2410c",
+          shadow: "rgba(249, 115, 22, 0.25)",
+        };
+      case "theme_winter":
+        return {
+          border: "border-sky-400 hover:border-sky-300",
+          stroke: "#38bdf8",
+          patternColor: "rgba(56, 189, 248, 0.14)",
+          patternColor2: "rgba(56, 189, 248, 0.07)",
+          emblemColor: "#0284c7",
+          shadow: "rgba(56, 189, 248, 0.25)",
+        };
+      case "theme_ocean":
+        return {
+          border: "border-cyan-500 hover:border-cyan-400",
+          stroke: "#06b6d4",
+          patternColor: "rgba(6, 182, 212, 0.14)",
+          patternColor2: "rgba(6, 182, 212, 0.07)",
+          emblemColor: "#0891b2",
+          shadow: "rgba(6, 182, 212, 0.25)",
+        };
+      case "theme_desert":
+        return {
+          border: "border-amber-600 hover:border-amber-500",
+          stroke: "#d97706",
+          patternColor: "rgba(217, 119, 6, 0.14)",
+          patternColor2: "rgba(217, 119, 6, 0.07)",
+          emblemColor: "#78350f",
+          shadow: "rgba(217, 119, 6, 0.25)",
+        };
+      case "theme_midnight_blue":
+      default:
+        return {
+          border: "border-indigo-500 hover:border-indigo-400",
+          stroke: "#6366f1",
+          patternColor: "rgba(99, 102, 241, 0.14)",
+          patternColor2: "rgba(99, 102, 241, 0.07)",
+          emblemColor: "#4f46e5",
+          shadow: "rgba(79, 70, 229, 0.25)",
+        };
+    }
+  };
+
+  const palette = getThemeColors(themeId);
+
   return {
-    bg: "bg-[#f1f5f9]",
-    border: "border-indigo-500 hover:border-indigo-600",
-    shadow: "rgba(79, 70, 229, 0.12)",
-    stroke: "#4f46e5",
-    patternColor: "rgba(79, 70, 229, 0.08)",
-    patternColor2: "rgba(79, 70, 229, 0.05)",
-    emblemColor: "#4f46e5",
+    bg: "bg-[#f8fafc]",
+    border: palette.border,
+    shadow: palette.shadow,
+    stroke: palette.stroke,
+    patternColor: palette.patternColor,
+    patternColor2: palette.patternColor2,
+    emblemColor: palette.emblemColor,
   };
 };
 
@@ -178,7 +253,7 @@ const renderCenterEmblem = (id: string, styles: any) => {
   }
 };
 
-export const MemoryCard: React.FC<MemoryCardProps> = ({
+export const MemoryCard: React.FC<MemoryCardProps> = memo(({
   emoji,
   index,
   isRevealed,
@@ -187,6 +262,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
   isMatchedByP1 = true,
   onClick,
   equippedCardBackId = "cardback_circle",
+  equippedThemeId = "theme_midnight_blue",
   language = "en",
   isTutorialTarget = false,
 }) => {
@@ -198,7 +274,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
   const [isJiggling, setIsJiggling] = useState(false);
   const [recentlyMatched, setRecentlyMatched] = useState(false);
   const [burstParticles, setBurstParticles] = useState<Array<{ id: number; dx: number; dy: number; size: number; color: string; delay: number }>>([]);
-  const styles = getCardBackStyles(equippedCardBackId);
+  const styles = getCardBackStyles(equippedCardBackId, equippedThemeId);
 
   useEffect(() => {
     if (isMatched) {
@@ -275,7 +351,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
   return (
     <div
       onClick={handleCardClick}
-      className={`relative w-full aspect-square cursor-pointer select-none group [perspective:1000px] poki-memory-card transition-all ease-out ${
+      className={`relative w-full h-full cursor-pointer select-none group [perspective:1000px] poki-memory-card transition-all ease-out ${
         emoji === "BLOCKED"
           ? "cursor-not-allowed pointer-events-none"
           : isTouch
@@ -306,15 +382,16 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
 
       {/* 3D Inner Card Wrapper */}
       <div
-        className={`relative w-full h-full duration-500 transition-transform [transform-style:preserve-3d] ${
+        className={`relative w-full h-full duration-500 transition-transform [transform-style:preserve-3d] [will-change:transform] ${
           isRevealed || isMatched || emoji === "BLOCKED" ? "[transform:rotateY(180deg)]" : ""
-        } ${isMismatch && !isTouch ? "animate-shake" : ""} ${isJiggling && !isTouch ? "animate-card-jiggle" : ""}`}
+        } ${isMismatch ? "animate-shake" : ""} ${isJiggling && !isTouch ? "animate-card-jiggle" : ""}`}
       >
         
-        {/* CARD FRONT (Face-Down State - Dual Layouts) */}
-        {/* MOBILE/TABLET CARD BACK SIDE (Now matches Desktop Premium Design) */}
+        {/* CARD BACK (Face-Down State - Single Lightweight Responsive Card Back) */}
         <div
-          className={`absolute inset-0 w-full h-full rounded-2xl ${styles.bg} border-2 ${styles.border} shadow-[0_6px_18px_-3px_rgba(0,0,0,0.16),0_2px_6px_-1px_rgba(0,0,0,0.1)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.22),0_4px_10px_-2px_rgba(0,0,0,0.14)] transition-all duration-300 flex lg:hidden flex-col items-center justify-center [backface-visibility:hidden] overflow-hidden`}
+          className={`absolute inset-0 w-full h-full rounded-2xl ${styles.bg} border-2 ${styles.border} shadow-[0_6px_18px_-3px_rgba(0,0,0,0.16),0_2px_6px_-1px_rgba(0,0,0,0.1)] ${
+            isTouch ? "" : "hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.22),0_4px_10px_-2px_rgba(0,0,0,0.14)]"
+          } transition-all duration-300 flex flex-col items-center justify-center [backface-visibility:hidden] overflow-hidden`}
         >
           {/* High-quality vector symmetrical pattern */}
           <svg
@@ -323,62 +400,19 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
             preserveAspectRatio="none"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
+            style={{
+              "--pattern-color": styles.patternColor,
+              "--pattern-color-2": styles.patternColor2,
+            } as React.CSSProperties}
           >
-            {/* Symmetrical grid pattern for premium texture */}
+            {/* Shared symmetrical grid pattern definition with unique index ID */}
             <defs>
-              <pattern id={`card-back-grid-mobile-${index}`} width="10" height="10" patternUnits="userSpaceOnUse">
-                <path d="M 10 0 L 0 0 0 10" fill="none" stroke={styles.patternColor} strokeWidth="0.5" />
-                <path d="M 0 10 L 10 0" fill="none" stroke={styles.patternColor2} strokeWidth="0.3" />
+              <pattern id={`card-back-grid-pattern-${index}`} width="10" height="10" patternUnits="userSpaceOnUse">
+                <path d="M 10 0 L 0 0 0 10" fill="none" stroke="var(--pattern-color)" strokeWidth="0.5" />
+                <path d="M 0 10 L 10 0" fill="none" stroke="var(--pattern-color-2)" strokeWidth="0.3" />
               </pattern>
             </defs>
-            <rect width="100" height="100" fill={`url(#card-back-grid-mobile-${index})`} />
-
-            {/* Symmetrical border frames */}
-            <rect x="3" y="3" width="94" height="94" rx="8" stroke={styles.stroke} strokeWidth="1.2" strokeOpacity="0.8" />
-            <rect x="6" y="6" width="88" height="88" rx="6" stroke={styles.stroke} strokeWidth="0.6" strokeOpacity="0.4" strokeDasharray="3 2" />
-
-            {/* Symmetrical corner flourishes */}
-            {/* Top-Left */}
-            <path d="M 10 16 L 10 10 L 16 10" stroke={styles.stroke} strokeWidth="0.8" strokeLinecap="round" strokeOpacity="0.7" />
-            <circle cx="13" cy="13" r="1" fill={styles.stroke} fillOpacity="0.8" />
-            
-            {/* Top-Right */}
-            <path d="M 90 16 L 90 10 L 84 10" stroke={styles.stroke} strokeWidth="0.8" strokeLinecap="round" strokeOpacity="0.7" />
-            <circle cx="87" cy="13" r="1" fill={styles.stroke} fillOpacity="0.8" />
-            
-            {/* Bottom-Left */}
-            <path d="M 10 84 L 10 90 L 16 90" stroke={styles.stroke} strokeWidth="0.8" strokeLinecap="round" strokeOpacity="0.7" />
-            <circle cx="13" cy="87" r="1" fill={styles.stroke} fillOpacity="0.8" />
-            
-            {/* Bottom-Right */}
-            <path d="M 90 84 L 90 90 L 84 90" stroke={styles.stroke} strokeWidth="0.8" strokeLinecap="round" strokeOpacity="0.7" />
-            <circle cx="87" cy="87" r="1" fill={styles.stroke} fillOpacity="0.8" />
-
-            {/* Dynamic Center Symmetrical Emblem */}
-            {renderCenterEmblem(equippedCardBackId, styles)}
-          </svg>
-        </div>
-
-        {/* DESKTOP PREMIUM CARD BACK SIDE (Redesigned) */}
-        <div
-          className={`absolute inset-0 w-full h-full rounded-2xl ${styles.bg} border-2 ${styles.border} shadow-[0_6px_18px_-3px_rgba(0,0,0,0.16),0_2px_6px_-1px_rgba(0,0,0,0.1)] hover:shadow-[0_12px_24px_-4px_rgba(0,0,0,0.22),0_4px_10px_-2px_rgba(0,0,0,0.14)] transition-all duration-300 hidden lg:flex flex-col items-center justify-center [backface-visibility:hidden] overflow-hidden`}
-        >
-          {/* High-quality vector symmetrical pattern */}
-          <svg
-            className="absolute inset-0 w-full h-full p-1.5 pointer-events-none select-none"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            {/* Symmetrical grid pattern for premium texture */}
-            <defs>
-              <pattern id={`card-back-grid-${index}`} width="10" height="10" patternUnits="userSpaceOnUse">
-                <path d="M 10 0 L 0 0 0 10" fill="none" stroke={styles.patternColor} strokeWidth="0.5" />
-                <path d="M 0 10 L 10 0" fill="none" stroke={styles.patternColor2} strokeWidth="0.3" />
-              </pattern>
-            </defs>
-            <rect width="100" height="100" fill={`url(#card-back-grid-${index})`} />
+            <rect width="100" height="100" fill={`url(#card-back-grid-pattern-${index})`} />
 
             {/* Symmetrical border frames */}
             <rect x="3" y="3" width="94" height="94" rx="8" stroke={styles.stroke} strokeWidth="1.2" strokeOpacity="0.8" />
@@ -500,4 +534,4 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
       </div>
     </div>
   );
-};
+});

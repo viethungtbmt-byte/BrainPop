@@ -1,5 +1,5 @@
 export interface DisplayConfig {
-  name: "desktop" | "tablet" | "mobilePortrait" | "mobileLandscape";
+  name: "desktop" | "tablet" | "tabletPortrait" | "tabletLandscape" | "mobilePortrait" | "mobileLandscape";
   
   // Visibility rules for key layout elements
   showTopBar: boolean;          // Determines if portrait topbar header is shown

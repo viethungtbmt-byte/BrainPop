@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, startTransition } from "react";
 import { generateMemoryBoard } from "../emoji/memory";
 import { BotDifficulty } from "../BOT/types";
 
@@ -96,21 +96,23 @@ export function useMemoryGame({
 
   // Generate Memory Game
   const generateMemoryGame = useCallback((targetDifficulty: any, mode: string = "solo") => {
-    const board = generateMemoryBoard(targetDifficulty, mode);
-    setMemoryCards(board.randomizedBoard);
-    setMemoryFlipped([]);
-    setMemoryMoves(0);
-    setMemoryTimeLeft(targetDifficulty === "6x8" ? 180 : targetDifficulty === "5x6" ? 150 : 120);
-    setMemoryFinished(false);
-    setMemoryTimerActive(true);
-    setMemoryBusy(false);
-    setIsPaused(false);
-    setP1Score(0);
-    setP2Score(0);
-    setActivePlayer(1);
-    setMatchedByP1([]);
-    setMatchedByP2([]);
-    setConsecutiveMatches(0);
+    startTransition(() => {
+      const board = generateMemoryBoard(targetDifficulty, mode);
+      setMemoryCards(board.randomizedBoard);
+      setMemoryFlipped([]);
+      setMemoryMoves(0);
+      setMemoryTimeLeft(targetDifficulty === "7x8" ? 360 : targetDifficulty === "6x8" ? 180 : targetDifficulty === "5x6" ? 150 : 120);
+      setMemoryFinished(false);
+      setMemoryTimerActive(true);
+      setMemoryBusy(false);
+      setIsPaused(false);
+      setP1Score(0);
+      setP2Score(0);
+      setActivePlayer(1);
+      setMatchedByP1([]);
+      setMatchedByP2([]);
+      setConsecutiveMatches(0);
+    });
     botMemoryRef.current.clear();
     trophiesUpdatedRef.current = false;
   }, []);

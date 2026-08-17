@@ -26,7 +26,7 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
   return (
     <div
       id="reset-confirm-backdrop"
-      className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-fade-in-backdrop animate-duration-200"
+      className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[130] flex items-center justify-center p-4 animate-fade-in-backdrop animate-duration-200 pointer-events-auto touch-manipulation"
       onClick={() => setShowResetConfirm(false)}
     >
       <div
@@ -55,24 +55,24 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
           <button
             id="btn-reset-cancel"
             onClick={() => {
-              synth.playSelect();
+              try { synth.playSelect(); } catch (e) {}
               setShowResetConfirm(false);
             }}
-            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-extrabold text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer"
+            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-extrabold text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer touch-manipulation pointer-events-auto"
           >
             {t.cancelText}
           </button>
           <button
             id="btn-reset-confirm"
             onClick={() => {
-              synth.playSelect();
+              try { synth.playSelect(); } catch (e) {}
               setWinsP1(0);
               setWinsP2(0);
               localStorage.removeItem("emoji_brainpop_2p_wins_p1");
               localStorage.removeItem("emoji_brainpop_2p_wins_p2");
               setShowResetConfirm(false);
             }}
-            className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md"
+            className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md touch-manipulation pointer-events-auto"
           >
             {t.resetButtonText}
           </button>

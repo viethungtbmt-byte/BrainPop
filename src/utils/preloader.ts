@@ -7,7 +7,7 @@ import { EMBEDDED_PAIRS } from "../emoji/related";
 import { COSMETIC_ITEMS } from "../itemShop/itemData";
 import { synth } from "../audio";
 import gameLogo from "../assets/images/emoji_brainpop_thumb_1784707895737.jpg";
-import logoIcon from "../assets/thumbnails/icon-256.png";
+import logoIcon from "../assets/thumbnails/icon-128.png";
 
 export interface PreloadProgressState {
   percentage: number; // 0 to 100
@@ -40,7 +40,7 @@ const ASSET_MANIFEST: PreloadManifestItem[] = [
     id: "logo-icon",
     taskName: "Loading Game Icon & UI Badges...",
     url: logoIcon,
-    estimatedBytes: 121259,
+    estimatedBytes: 64661,
     type: "image",
   },
   {

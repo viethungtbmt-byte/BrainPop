@@ -55,19 +55,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   soundOn,
   setSoundOn,
 }) => {
+  if (!isSettingsOpen) return null;
+
   return (
     <div
       id="settings-modal-backdrop"
-      className={`absolute inset-0 bg-[#0d101b]/70 md:backdrop-blur-md backdrop-blur-none z-[100] flex items-center justify-center p-4 transition-all duration-300 ${
-        isSettingsOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-      }`}
+      className="fixed inset-0 bg-[#0d101b]/70 md:backdrop-blur-md backdrop-blur-none z-[100] flex items-center justify-center p-3 sm:p-4 landscape:p-2 h-[100dvh] max-h-[100dvh] overflow-hidden"
       onClick={() => setIsSettingsOpen(false)}
     >
       <div
         id="settings-modal-content"
-        className={`${currentTheme.dialogBg} md:backdrop-blur-xl backdrop-blur-none border-2 rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-[0_24px_60px_rgba(4,8,24,0.7),inset_0_1.5px_1.5px_rgba(255,255,255,0.2)] relative overflow-hidden text-slate-100 transition-all duration-300 transform max-h-[90vh] overflow-y-auto ${
-          isSettingsOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        }`}
+        className={`${currentTheme.dialogBg} md:backdrop-blur-xl backdrop-blur-none border-2 rounded-3xl w-full max-w-md p-4 sm:p-6 shadow-xl relative overflow-hidden text-slate-100 transition-all duration-300 transform max-h-[92dvh] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
         <PanelBackground showTopBar={true} />
@@ -84,7 +82,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               synth.playClose();
               setIsSettingsOpen(false);
             }}
-            className="p-1.5 rounded-xl bg-[#34448e] hover:bg-[#3e51aa] text-slate-300 hover:text-white transition-all border border-[#546bbf]/40 shadow-sm cursor-pointer"
+            className="p-1.5 rounded-xl bg-[#2f3d80] hover:bg-[#384a9c] text-slate-300 hover:text-white transition-colors border border-[#546bbf]/40 cursor-pointer"
             title={t.settingsClose}
           >
             <X className="w-4 h-4" />
@@ -96,14 +94,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Row 1: Language Settings */}
           <div
             id="setting-row-language"
-            className="p-4 rounded-2xl bg-[#1e2552]/70 border-2 border-[#3f509d]/40 flex flex-col gap-3 shadow-[0_4px_12px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)]"
+            className="p-4 rounded-2xl bg-[#1a224a] border border-[#3f509d]/50 flex flex-col gap-3"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <span className="text-xl">🌐</span>
                 <div>
                   <h3 className="text-sm font-black text-slate-100">{t.settingsLanguage}</h3>
-                  <p className="text-[10px] text-slate-300 font-bold">Select your language</p>
+                  <p className="text-[10px] text-slate-300 font-bold">{t.settingsLanguage}</p>
                 </div>
               </div>
             </div>
@@ -116,7 +114,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   synth.playSelect();
                   setIsLangDropdownOpen(!isLangDropdownOpen);
                 }}
-                className="w-full py-2 px-3.5 rounded-xl bg-[#2d3875] border-2 border-[#546bbf]/40 hover:border-[#546bbf]/60 text-slate-100 text-xs font-black flex items-center justify-between transition-all focus:outline-none cursor-pointer shadow-sm"
+                className="w-full py-2 px-3.5 rounded-xl bg-[#27326b] hover:bg-[#2f3c80] border border-[#546bbf]/50 text-slate-100 text-xs font-black flex items-center justify-between transition-colors focus:outline-none cursor-pointer"
               >
                 <span>
                   {LANGUAGES_LIST.find((l) => l.code === language)?.label || "English"}
@@ -135,7 +133,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     : "max-h-0 opacity-0 pointer-events-none mt-0"
                 }`}
               >
-                <div className="bg-[#1e2552] border-2 border-[#3f509d]/60 rounded-xl p-1.5 grid grid-cols-2 gap-1 shadow-xl">
+                <div className="bg-[#181f44] border border-[#3f509d]/60 rounded-xl p-1.5 grid grid-cols-2 gap-1 shadow-lg">
                   {LANGUAGES_LIST.map((lang) => {
                     const isSelected = language === lang.code;
                     return (
@@ -147,15 +145,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           changeLanguage(lang.code);
                           setIsLangDropdownOpen(false);
                         }}
-                        className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1 cursor-pointer ${
+                        className={`w-full py-1.5 px-2.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-between gap-1 cursor-pointer ${
                           isSelected
-                            ? "bg-gradient-to-r from-cyan-600/30 to-indigo-600/30 text-cyan-300 border border-cyan-500/30 shadow-inner"
+                            ? "bg-cyan-950/60 text-cyan-300 border border-cyan-500/40"
                             : "bg-transparent text-slate-300 hover:text-slate-100 hover:bg-slate-800/40 border border-transparent"
                         }`}
                       >
                         <span className="truncate">{lang.label}</span>
                         {isSelected && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)] shrink-0" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
                         )}
                       </button>
                     );
@@ -168,7 +166,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Row 2: Audio Config */}
           <div
             id="setting-row-audio"
-            className="p-4 rounded-2xl bg-[#1e2552]/70 border-2 border-[#3f509d]/40 flex items-center justify-between gap-4 shadow-[0_4px_12px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.12)]"
+            className="p-4 rounded-2xl bg-[#1a224a] border border-[#3f509d]/50 flex items-center justify-between gap-4"
           >
             <div className="flex items-center gap-2.5">
               <div
@@ -192,14 +190,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 synth.playSelect();
                 setSoundOn(!soundOn);
               }}
-              className={`w-12 h-6 rounded-full p-0.5 transition-all duration-200 focus:outline-none relative border border-slate-900/10 ${
+              className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-200 focus:outline-none relative border border-slate-900/10 cursor-pointer ${
                 soundOn
-                  ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                  ? "bg-emerald-500"
                   : "bg-[#2d3875]"
               }`}
             >
               <div
-                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                className={`bg-white w-4 h-4 rounded-full transform transition-transform duration-200 ${
                   soundOn ? "translate-x-6" : "translate-x-0"
                 }`}
               />
