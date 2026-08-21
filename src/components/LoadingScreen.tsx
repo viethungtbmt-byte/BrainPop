@@ -7,6 +7,29 @@ interface LoadingScreenProps {
   onLoadingComplete: () => void;
 }
 
+// Fixed set of subtle watermark emojis with static, non-random positions (increased to ~4x size)
+const FIXED_LOADING_WATERMARKS = [
+  // Top-left quadrant
+  { emoji: "🧠", top: "4%", left: "4%", right: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "-12deg", opacity: "opacity-[0.04]" },
+  { emoji: "⚡", top: "24%", left: "14%", right: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "15deg", opacity: "opacity-[0.035]" },
+  
+  // Top-right quadrant
+  { emoji: "💡", top: "6%", right: "6%", left: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "12deg", opacity: "opacity-[0.04]" },
+  { emoji: "⭐", top: "22%", right: "16%", left: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "-15deg", opacity: "opacity-[0.035]" },
+  
+  // Middle lateral edges
+  { emoji: "🚀", top: "46%", left: "3%", right: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "-20deg", opacity: "opacity-[0.03]" },
+  { emoji: "🔮", top: "44%", right: "3%", left: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "18deg", opacity: "opacity-[0.035]" },
+  
+  // Bottom-left quadrant
+  { emoji: "🎯", top: "66%", left: "8%", right: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "8deg", opacity: "opacity-[0.04]" },
+  { emoji: "🧩", top: "84%", left: "18%", right: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "-14deg", opacity: "opacity-[0.03]" },
+  
+  // Bottom-right quadrant
+  { emoji: "🏆", top: "68%", right: "8%", left: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "-10deg", opacity: "opacity-[0.04]" },
+  { emoji: "✨", top: "86%", right: "18%", left: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "22deg", opacity: "opacity-[0.03]" },
+];
+
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
   // Target state emitted by AssetPreloader
   const [targetState, setTargetState] = useState<PreloadProgressState>({
@@ -92,40 +115,39 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
   return (
     <div
       id="loading-screen-container"
-      className={`fixed inset-0 z-[150] flex flex-col items-center justify-between p-3 sm:p-8 landscape:py-2 landscape:px-4 select-none overflow-hidden bg-slate-950 text-slate-100 transition-all duration-500 ease-in-out ${
+      className={`fixed inset-0 z-[150] flex flex-col items-center justify-between p-3 sm:p-8 landscape:py-2 landscape:px-4 select-none overflow-hidden bg-gradient-to-b from-[#243044] via-[#1E283A] to-[#1A2233] text-slate-100 transition-all duration-500 ease-in-out ${
         isFadingOut ? "opacity-0 scale-105 pointer-events-none" : "opacity-100 scale-100"
       }`}
     >
       {/* GLOWING AMBIENT BACKGROUND ATMOSPHERE */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-        {/* Deep cyan & indigo radial glow orbs */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] sm:w-[800px] sm:h-[800px] bg-gradient-to-tr from-cyan-600/20 via-indigo-600/15 to-pink-600/10 rounded-full blur-[140px] animate-pulse" />
-        <div className="absolute top-[-10%] left-[-10%] w-[350px] h-[350px] bg-cyan-500/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[350px] h-[350px] bg-indigo-500/15 rounded-full blur-[100px]" />
+        {/* Soft cyan & indigo radial glow orbs harmonized with gray-blue background */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] sm:w-[800px] sm:h-[800px] bg-gradient-to-tr from-cyan-500/15 via-indigo-500/10 to-blue-500/10 rounded-full blur-[140px]" />
+        <div className="absolute top-[-10%] left-[-10%] w-[350px] h-[350px] bg-cyan-400/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[350px] h-[350px] bg-indigo-400/10 rounded-full blur-[100px]" />
 
-        {/* Subtle SVG Grid Watermark */}
-        <svg width="100%" height="100%" className="w-full h-full opacity-[0.03] grayscale">
-          <defs>
-            <pattern
-              id="loading-pattern"
-              width="120"
-              height="120"
-              patternUnits="userSpaceOnUse"
-              patternTransform="rotate(-20)"
-            >
-              <text x="20" y="30" fontSize="18" fill="#ffffff">🧠</text>
-              <text x="80" y="30" fontSize="18" fill="#ffffff">⚡</text>
-              <text x="50" y="90" fontSize="18" fill="#ffffff">💡</text>
-              <text x="100" y="90" fontSize="18" fill="#ffffff">⭐</text>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#loading-pattern)" />
-        </svg>
+        {/* FIXED SUBTLE WATERMARK EMOJIS (Static coordinates, non-random) */}
+        {FIXED_LOADING_WATERMARKS.map((wm, idx) => (
+          <div
+            key={`fixed-loading-wm-${idx}`}
+            className={`absolute pointer-events-none select-none font-emoji ${wm.size} ${wm.opacity} filter grayscale contrast-125 transition-opacity duration-300`}
+            style={{
+              top: wm.top,
+              left: wm.left,
+              right: wm.right,
+              bottom: wm.bottom,
+              transform: `rotate(${wm.rotate})`,
+            }}
+            aria-hidden="true"
+          >
+            {wm.emoji}
+          </div>
+        ))}
       </div>
 
       {/* TOP HEADER BRANDING */}
       <div className="relative z-10 flex items-center gap-2 pt-1 sm:pt-4 landscape:pt-0.5">
-        <span className="flex items-center gap-1.5 px-3 py-1 landscape:px-2.5 landscape:py-0.5 rounded-full bg-slate-900/80 border border-slate-700/60 text-[11px] landscape:text-[10px] font-semibold text-slate-300 shadow-sm backdrop-blur-md">
+        <span className="flex items-center gap-1.5 px-3 py-1 landscape:px-2.5 landscape:py-0.5 rounded-full bg-[#1A2332]/85 border border-slate-600/50 text-[11px] landscape:text-[10px] font-semibold text-slate-200 shadow-sm backdrop-blur-md">
           <Zap className="w-3.5 h-3.5 landscape:w-3 landscape:h-3 text-cyan-400 animate-pulse" />
           <span>HTML5 GAME ENGINE</span>
         </span>
@@ -135,11 +157,11 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
       <div className="relative z-10 flex flex-col items-center justify-center my-auto py-2 sm:py-6 landscape:py-1 text-center shrink">
         {/* LOGO ICON CONTAINER WITH GLOWING HALO */}
         <div className="relative group">
-          {/* Pulsing Backlight Halo */}
-          <div className="absolute inset-0 -m-3 sm:-m-4 landscape:-m-2 rounded-3xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-pink-500 opacity-70 blur-xl animate-pulse" />
+          {/* Soft Backlight Halo */}
+          <div className="absolute inset-0 -m-4 sm:-m-6 landscape:-m-3 rounded-3xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-pink-500 opacity-60 blur-2xl pointer-events-none" />
 
-          {/* Glossy Icon Frame */}
-          <div className="relative w-20 h-20 sm:w-36 sm:h-36 landscape:w-14 landscape:h-14 sm:landscape:w-20 sm:landscape:h-20 rounded-2xl sm:rounded-3xl landscape:rounded-xl bg-slate-900 border-2 border-slate-700/80 p-1.5 sm:p-2 landscape:p-1 shadow-2xl flex items-center justify-center overflow-hidden">
+          {/* Glossy Icon Frame (Approximately 2x scaled) */}
+          <div className="relative w-36 h-36 sm:w-60 sm:h-60 md:w-64 md:h-64 landscape:w-24 landscape:h-24 sm:landscape:w-36 sm:landscape:h-36 rounded-2xl sm:rounded-3xl landscape:rounded-xl bg-[#1A2332] border-2 sm:border-3 border-slate-600/70 p-2 sm:p-3 landscape:p-1.5 shadow-2xl flex items-center justify-center overflow-hidden">
             <img
               src={gameLogo}
               alt="Emoji BrainPop Logo"
@@ -148,8 +170,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
           </div>
 
           {/* Floating Brain Badge */}
-          <div className="absolute -top-2 -right-2 sm:-top-3 sm:-right-3 landscape:-top-1.5 landscape:-right-1.5 p-1.5 sm:p-2 landscape:p-1 bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-xl landscape:rounded-lg text-white shadow-lg border border-cyan-300/40">
-            <Brain className="w-4 h-4 sm:w-6 sm:h-6 landscape:w-3.5 landscape:h-3.5" />
+          <div className="absolute -top-2.5 -right-2.5 sm:-top-4 sm:-right-4 landscape:-top-2 landscape:-right-2 p-2 sm:p-3.5 landscape:p-1.5 bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-xl sm:rounded-2xl landscape:rounded-lg text-white shadow-xl border border-cyan-300/40">
+            <Brain className="w-5 h-5 sm:w-8 sm:h-8 landscape:w-4 landscape:h-4" />
           </div>
         </div>
 
@@ -185,7 +207,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
         </div>
 
         {/* PROGRESS BAR CONTAINER */}
-        <div className="relative w-full h-3.5 sm:h-5 landscape:h-3 rounded-full bg-slate-900/90 border border-slate-700/80 p-0.5 shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] overflow-hidden">
+        <div className="relative w-full h-3.5 sm:h-5 landscape:h-3 rounded-full bg-[#141C29]/90 border border-slate-600/70 p-0.5 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] overflow-hidden">
           {/* Animated Fill Bar */}
           <div
             className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-pink-500 transition-all duration-75 relative overflow-hidden shadow-[0_0_16px_rgba(6,182,212,0.6)]"
@@ -197,7 +219,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
         </div>
 
         {/* ENGINE BADGES FOOTER */}
-        <div className="flex items-center justify-center gap-2 pt-1.5 sm:pt-2 landscape:pt-1 text-[9px] sm:text-xs landscape:text-[9px] text-slate-400 font-mono font-medium px-1 border-t border-slate-800/60 mt-0.5 landscape:mt-0">
+        <div className="flex items-center justify-center gap-2 pt-1.5 sm:pt-2 landscape:pt-1 text-[9px] sm:text-xs landscape:text-[9px] text-slate-400 font-mono font-medium px-1 border-t border-slate-700/50 mt-0.5 landscape:mt-0">
           <span>HTML5</span>
           <span>•</span>
           <span>WEBGL</span>
@@ -208,3 +230,4 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
     </div>
   );
 };
+

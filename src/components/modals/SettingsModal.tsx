@@ -73,7 +73,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between mb-6 relative z-10">
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-cyan-400 animate-spin-slow" />
+            <Settings className="w-5 h-5 text-cyan-400" />
             <h2 className="text-lg font-black tracking-tight">{t.settingsTitle}</h2>
           </div>
           <button

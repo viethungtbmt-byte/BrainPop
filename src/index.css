@@ -646,7 +646,10 @@ html.is-safari-landscape #mobile-menu-container {
   height: var(--safari-real-vh, 100dvh) !important;
   max-height: var(--safari-real-vh, 100dvh) !important;
   min-height: var(--safari-real-vh, 100dvh) !important;
-  overflow-y: auto !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   box-sizing: border-box !important;
 }
 
@@ -719,7 +722,7 @@ html.is-safari-landscape #settings-modal-content {
   margin: 0 !important;
 }
 
-/* Mobile Config Menu full viewport placement (always full screen and top overlay) */
+/* Mobile Config Menu floating viewport backdrop placement */
 #mobile-menu-container {
   position: fixed !important;
   top: 0 !important;
@@ -732,7 +735,22 @@ html.is-safari-landscape #settings-modal-content {
   height: 100dvh !important;
   z-index: 9999 !important;
   box-sizing: border-box !important;
-  background-color: #0c102b !important;
+  background-color: rgba(220, 226, 235, 0.45) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Floating Menu Content Card responsiveness */
+#mobile-menu-content {
+  box-sizing: border-box !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 /* Modal backdrops must render above mobile menu container (z-index 9999) */
@@ -788,7 +806,7 @@ html.is-safari-landscape #settings-modal-content {
 }
 
 /* Reduce vertical gaps and sizing in landscape sidebar */
-.is-mobile-landscape .poki-game-frame .flex.landscape:flex-col {
+.is-mobile-landscape .poki-game-frame .flex.landscape\:flex-col {
   gap: 6px !important;
 }
 

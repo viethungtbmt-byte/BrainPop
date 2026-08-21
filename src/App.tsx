@@ -46,6 +46,7 @@ import { MemoryCard } from "./components/MemoryCard";
 import { MobileLandscapeMenu } from "./components/engine/MobileLandscapeMenu";
 import { GameHUD, PlayerScoreHUD } from "./components/engine/GameHUD";
 import { GameViewportFrame } from "./components/engine/GameViewportFrame";
+import { RoyalPanelFrame } from "./components/engine/RoyalPanelFrame";
 import { SettingsModal } from "./components/modals/SettingsModal";
 import { ResetConfirmModal } from "./components/modals/ResetConfirmModal";
 import { HintModal } from "./components/modals/HintModal";
@@ -294,9 +295,6 @@ export default function App() {
   // Challenge level selection dropdown open state
   const [isDiffDropdownOpen, setIsDiffDropdownOpen] = useState<boolean>(false);
 
-  // How to play guide state
-  const [isHowToPlayOpen, setIsHowToPlayOpen] = useState<boolean>(false);
-
   const {
     config: layoutConfig,
     isOrienting,
@@ -323,7 +321,6 @@ export default function App() {
     setIsPlayModeDropdownOpen(false);
     setIsPlayModeDropdownOpenMobile(false);
     setIsDiffDropdownOpen(false);
-    setIsHowToPlayOpen(false);
     setIsLangDropdownOpen(false);
 
     if (!layoutConfig.allowMobileConfigMenu) {
@@ -1086,63 +1083,6 @@ export default function App() {
     rotation: number;
   }
   const [memoryWatermarks, setMemoryWatermarks] = useState<WatermarkEmoji[]>([]);
-
-  // Dynamic Help Config based on active Play Mode or Match Tab
-  const helpConfig = useMemo(() => {
-    if (activeTab === "match") {
-      return {
-        title: t.matchTitle,
-        iconName: "Info",
-        rules: t.matchInstructions,
-      };
-    }
-
-    // Otherwise, we are in "memory" tab, so check memoryMode
-    if (memoryMode === "solo") {
-      return {
-        title: t.soloTitle,
-        iconName: "SquareStack",
-        rules: t.soloRules,
-      };
-    } else if (memoryMode === "twoPlayers") {
-      return {
-        title: t.twoPlayersTitle,
-        iconName: "Users",
-        rules: t.twoPlayersRules,
-      };
-    } else {
-      // vsBot
-      return {
-        title: t.vsBotTitle,
-        iconName: "Bot",
-        rules: t.vsBotRules,
-      };
-    }
-  }, [activeTab, memoryMode, t]);
-
-  // Dynamic Help Config for Menu Panels matching the currently selected mode in the menu
-  const menuHelpConfig = useMemo(() => {
-    if (pendingMemoryMode === "solo") {
-      return {
-        title: t.soloTitle,
-        iconName: "SquareStack",
-        rules: t.soloRules,
-      };
-    } else if (pendingMemoryMode === "twoPlayers") {
-      return {
-        title: t.twoPlayersTitle,
-        iconName: "Users",
-        rules: t.twoPlayersRules,
-      };
-    } else {
-      // vsBot
-      return {
-        title: t.vsBotTitle,
-        iconName: "Bot",
-        rules: t.vsBotRules,
-      };
-    }
-  }, [pendingMemoryMode, t]);
 
   // Poki safeguard: Prevent page scrolling/jumping from Space and Arrow keys
   useEffect(() => {
@@ -2806,7 +2746,6 @@ export default function App() {
         winsP1={winsP1}
         winsP2={winsP2}
         setShowResetConfirm={setShowResetConfirm}
-        helpConfig={menuHelpConfig}
       />
     );
   };
@@ -3286,81 +3225,35 @@ export default function App() {
               </div>
             )}
 
-            {/* How to Play trigger in Landscape Sidebar Footer */}
-            <div className="flex flex-col gap-2 w-full mt-auto">
-              {/* How to Play trigger */}
-              <button
-                id="btn-sidebar-how-to-play"
-                onClick={() => { synth.playSelect(); setIsHowToPlayOpen(!isHowToPlayOpen); }}
-                className={`px-4 py-2.5 rounded-2xl border-2 text-xs font-black flex items-center justify-between gap-1 transition-colors duration-150 focus:outline-none cursor-pointer w-full lg:-translate-y-[2px] lg:hover:-translate-y-1 ${
-                  isHowToPlayOpen
-                    ? "bg-gradient-to-r from-cyan-500/25 to-cyan-600/15 text-cyan-300 border-cyan-400/50 shadow-sm lg:shadow-[0_6px_16px_rgba(34,211,238,0.25)]"
-                    : "bg-gradient-to-b from-[#34448e]/60 to-[#25326d]/60 hover:from-[#3a4ba1]/70 hover:to-[#2b3a7a]/70 border-[#546bbf]/30 text-slate-100 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-cyan-400" />
+            {/* Landscape Sidebar Footer (Shop & Settings triggers) */}
+            {(isDesktop || isTabletLandscape) && (
+              <div className="flex flex-col gap-2 w-full mt-auto">
+                {/* ⭐ Shop trigger */}
+                <button
+                  id="btn-sidebar-shop"
+                  onClick={() => { synth.playSelect(); setIsShopOpen(true); }}
+                  className="flex px-4 py-2.5 rounded-2xl border-2 bg-gradient-to-b from-[#34448e]/60 to-[#25326d]/60 hover:from-[#3a4ba1]/70 hover:to-[#2b3a7a]/70 border-[#546bbf]/30 text-slate-100 text-xs font-black items-center gap-1.5 transition-colors duration-150 focus:outline-none cursor-pointer w-full lg:-translate-y-[2px] lg:hover:-translate-y-1 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                >
+                  <Store className="w-3.5 h-3.5 text-amber-400" />
                   <span>
-                    {t.howToPlayTitle}
+                    {t.shopTitle}
                   </span>
-                </div>
-                <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform duration-200 ${isHowToPlayOpen ? "rotate-180 text-cyan-400" : ""}`} />
-              </button>
+                </button>
 
-              {/* ⭐ Shop & Settings triggers (Visible only on Desktop and Tablet Landscape) */}
-              {(isDesktop || isTabletLandscape) && (
-                <>
-                  {/* ⭐ Shop trigger */}
+                {/* Compact settings in Landscape footer */}
+                <div className="flex items-center justify-between gap-2 mt-0.5">
                   <button
-                    id="btn-sidebar-shop"
-                    onClick={() => { synth.playSelect(); setIsShopOpen(true); }}
-                    className="flex px-4 py-2.5 rounded-2xl border-2 bg-gradient-to-b from-[#34448e]/60 to-[#25326d]/60 hover:from-[#3a4ba1]/70 hover:to-[#2b3a7a]/70 border-[#546bbf]/30 text-slate-100 text-xs font-black items-center gap-1.5 transition-colors duration-150 focus:outline-none cursor-pointer w-full lg:-translate-y-[2px] lg:hover:-translate-y-1 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                    onClick={() => { synth.playSelect(); setIsSettingsOpen(true); }}
+                    className="w-full py-2.5 rounded-2xl bg-gradient-to-b from-[#34448e] to-[#25326d] border border-[#546bbf]/40 hover:from-[#3e51aa] hover:to-[#2e3e86] text-slate-100 flex items-center justify-center gap-1.5 text-xs font-extrabold focus:outline-none cursor-pointer lg:-translate-y-[2px] lg:hover:-translate-y-1 transition-colors duration-150 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                   >
-                    <Store className="w-3.5 h-3.5 text-amber-400" />
-                    <span>
-                      {t.shopTitle}
-                    </span>
+                    <Settings className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>{t.settingsTitleShort}</span>
                   </button>
-
-                  {/* Compact settings in Landscape footer */}
-                  <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <button
-                      onClick={() => { synth.playSelect(); setIsSettingsOpen(true); }}
-                      className="w-full py-2.5 rounded-2xl bg-gradient-to-b from-[#34448e] to-[#25326d] border border-[#546bbf]/40 hover:from-[#3e51aa] hover:to-[#2e3e86] text-slate-100 flex items-center justify-center gap-1.5 text-xs font-extrabold focus:outline-none cursor-pointer lg:-translate-y-[2px] lg:hover:-translate-y-1 transition-colors duration-150 shadow-sm lg:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
-                    >
-                      <Settings className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>{t.settingsTitleShort}</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-          </div>
-
-          {/* Collapsible Instructions Drawer Panel (Only for Portrait Mode) */}
-          {isHowToPlayOpen && (
-            <div className={`absolute top-full left-0 right-0 z-50 border-b backdrop-blur-md py-2 px-3 animate-fade-in shadow-2xl landscape:hidden ${currentTheme.dialogBg} ${currentTheme.borderAccent}`}>
-              <div className={`p-2 rounded-xl flex items-start gap-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)] ${currentTheme.cardBg} ${currentTheme.cardBorder} border`}>
-                {helpConfig.iconName === "SquareStack" ? (
-                  <SquareStack className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${currentTheme.accentText}`} />
-                ) : helpConfig.iconName === "Users" ? (
-                  <Users className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${currentTheme.accentText}`} />
-                ) : helpConfig.iconName === "Bot" ? (
-                  <Bot className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${currentTheme.accentText}`} />
-                ) : (
-                  <Info className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${currentTheme.accentText}`} />
-                )}
-                <div className={`text-[9px] sm:text-[10px] leading-snug whitespace-pre-line font-medium ${currentTheme.textSecondary}`}>
-                  <div className={`font-extrabold mb-0.5 text-[11px] flex items-center gap-1.5 ${currentTheme.textPrimary}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full animate-ping ${currentTheme.accentBg}`}></span>
-                    {helpConfig.title}:
-                  </div>
-                  {helpConfig.rules}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+
+          </div>
 
           {/* SIDEBAR TOGGLE BUTTON (Capsule Handle attached to the right edge of the sidebar) */}
           {layoutConfig.showSidebarToggle && (
@@ -3455,478 +3348,424 @@ export default function App() {
               )}
             </div>
           )}
-          {isHowToPlayOpen && (
-            <div 
-              id="how-to-play-backdrop"
-              className="hidden landscape:flex absolute inset-0 bg-[#0d101b]/70 backdrop-blur-md z-45 flex-col items-center justify-center p-6 text-center animate-fade-in border border-transparent shadow-2xl"
-            >
-              <div 
-                id="how-to-play-content"
-                className={`max-w-md w-full backdrop-blur-xl border-2 rounded-3xl p-6 shadow-[0_20px_50px_rgba(10,15,35,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)] relative overflow-hidden ${currentTheme.dialogBg} ${currentTheme.borderAccent}`}
-              >
-                <PanelBackground showTopBar={true} />
-                <button 
-                  onClick={() => setIsHowToPlayOpen(false)}
-                  className={`absolute top-4 right-4 p-1 rounded-lg transition-colors hover:bg-slate-500/10 ${currentTheme.textSecondary}`}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="flex flex-col items-center gap-3">
-                  <div className={`p-3 rounded-full border bg-opacity-10 ${currentTheme.accentText} ${currentTheme.borderAccent}`}>
-                    {helpConfig.iconName === "SquareStack" ? (
-                      <SquareStack className="w-6 h-6" />
-                    ) : helpConfig.iconName === "Users" ? (
-                      <Users className="w-6 h-6" />
-                    ) : helpConfig.iconName === "Bot" ? (
-                      <Bot className="w-6 h-6" />
-                    ) : (
-                      <Info className="w-6 h-6" />
-                    )}
-                  </div>
-                  <h3 className={`font-black text-sm tracking-tight ${currentTheme.textPrimary}`}>
-                    {helpConfig.title}
-                  </h3>
-                  <p className={`text-[10px] sm:text-xs leading-snug text-left whitespace-pre-line p-3 sm:p-4 rounded-xl sm:rounded-2xl border max-h-[160px] overflow-y-auto w-full shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)] ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.textSecondary}`}>
-                    {helpConfig.rules}
-                  </p>
-                  <button
-                    onClick={() => setIsHowToPlayOpen(false)}
-                    className={`mt-2 w-full py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer ${currentTheme.buttonPrimary}`}
-                  >
-                    {t.gotItBtn}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* --- MOBILE CONFIG MENU OVERLAY (PERMANENTLY MOUNTED FOR 0MS TOGGLE LATENCY) --- */}
+          {/* --- MOBILE CONFIG MENU OVERLAY (FLOATING SCI-FI TECH PANEL LAYERED OVER GAME BOARD) --- */}
           {layoutConfig.allowMobileConfigMenu && (
-            /* MOBILE CONFIG MENU SCREEN (OVERLAY) */
             <div 
               id="mobile-menu-container" 
-              className={`fixed inset-0 z-[100] flex flex-col ${currentTheme.dialogBg} text-slate-100 transition-[opacity,visibility] duration-200 overflow-y-auto ${
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  synth.playSelect();
+                  applyPendingConfigurationAndStartOrResume();
+                }
+              }}
+              className={`fixed inset-0 z-[100] flex items-center justify-center ${!isPortrait ? "p-1.5 sm:p-3 md:p-6" : "p-2.5 sm:p-4 md:p-6"} text-slate-100 transition-[opacity,visibility] duration-200 overflow-hidden select-none bg-slate-200/45 backdrop-blur-sm ${
                 isMobileConfigOpen ? "opacity-100 pointer-events-auto visible" : "opacity-0 pointer-events-none invisible"
-              } ${!isPortrait ? 'justify-between p-2 sm:p-4' : 'p-4'}`}
+              }`}
               style={{
                 willChange: 'opacity, visibility',
-                paddingTop: !isPortrait ? '8px' : 'calc(env(safe-area-inset-top, 16px) + 8px)',
-                paddingBottom: !isPortrait ? 'calc(env(safe-area-inset-bottom, 8px) + 2px)' : 'calc(env(safe-area-inset-bottom, 16px) + 8px)',
-                paddingLeft: !isPortrait ? 'calc(env(safe-area-inset-left, 12px) + 4px)' : 'calc(env(safe-area-inset-left, 16px) + 8px)',
-                paddingRight: !isPortrait ? 'calc(env(safe-area-inset-right, 12px) + 4px)' : 'calc(env(safe-area-inset-right, 16px) + 8px)',
+                paddingTop: `calc(env(safe-area-inset-top, 0px) + ${!isPortrait ? '4px' : '8px'})`,
+                paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${!isPortrait ? '4px' : '8px'})`,
+                paddingLeft: 'calc(env(safe-area-inset-left, 0px) + 8px)',
+                paddingRight: 'calc(env(safe-area-inset-right, 0px) + 8px)',
               }}
             >
-              <PanelBackground showTopBar={true} />
-              {/* Header with Title (Portrait Only) */}
-              {isPortrait && (
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-3 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-xl text-white">
-                      <Brain className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-black tracking-wider uppercase bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent">
-                      Emoji BrainPop Menu
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {!isPortrait ? (
-                renderMobileLandscapeMenu()
-              ) : (
-                /* SINGLE UNIFIED RESPONSIVE LAYOUT FOR PORTRAIT */
-                <div className="flex-1 flex flex-col gap-4 max-w-xl mx-auto w-full">
-                  {/* 1. PLAY MODE SELECTOR */}
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                      {t.playModeLabel}
-                    </span>
-                    <div className="bg-[#182046] border border-slate-800/80 p-2 rounded-2xl shadow-none grid grid-cols-3 gap-2">
-                      {/* Classic */}
-                      <button
-                        onClick={() => {
-                          synth.playSelect();
-                          if (pendingMemoryMode !== "solo") {
-                            setPendingDifficulty("3x4");
-                            setPendingMemoryMode("solo");
-                          }
-                        }}
-                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-1 cursor-pointer ${
-                          pendingMemoryMode === "solo"
-                            ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
-                            : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
-                        }`}
-                      >
-                        <Zap className={`w-5 h-5 ${pendingMemoryMode === "solo" ? "text-slate-950" : "text-amber-400"}`} />
-                        <span>Classic</span>
-                      </button>
-
-                      {/* 2 Players */}
-                      <button
-                        onClick={() => {
-                          synth.playSelect();
-                          if (pendingMemoryMode !== "twoPlayers") {
-                            const finalDiff = (pendingDifficulty === "5x5" || pendingDifficulty === "5x6" || pendingDifficulty === "6x6" || pendingDifficulty === "6x8") ? pendingDifficulty : "5x5";
-                            setPendingDifficulty(finalDiff);
-                            setPendingMemoryMode("twoPlayers");
-                          }
-                        }}
-                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-1 cursor-pointer ${
-                          pendingMemoryMode === "twoPlayers"
-                            ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
-                            : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
-                        }`}
-                      >
-                        <Users className={`w-5 h-5 ${pendingMemoryMode === "twoPlayers" ? "text-slate-950" : "text-rose-400"}`} />
-                        <span>2 Players</span>
-                      </button>
-
-                      {/* Challenge Mode */}
-                      <button
-                        onClick={() => {
-                          synth.playSelect();
-                          if (pendingMemoryMode !== "vsBot") {
-                            const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
-                            setPendingDifficulty(finalDiff);
-                            setPendingMemoryMode("vsBot");
-                          }
-                        }}
-                        className={`py-3 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-1 cursor-pointer ${
-                          pendingMemoryMode === "vsBot"
-                            ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
-                            : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
-                        }`}
-                      >
-                        <Bot className={`w-5 h-5 ${pendingMemoryMode === "vsBot" ? "text-slate-950" : "text-cyan-400"}`} />
-                        <span>{t.modeBattle}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 2. DYNAMIC INFORMATION SECTION */}
-                  <div className="shrink-0 flex flex-col gap-2">
-                    {pendingMemoryMode === "solo" && (
-                      <div className="flex flex-col gap-2.5">
-                        {/* Prominent Current Score Badges for Portrait Mobile Menu */}
-                        <div className="grid grid-cols-2 gap-3 mb-1">
-                          <div className="flex items-center justify-between w-full bg-gradient-to-r from-[#10b981]/15 to-emerald-500/5 border border-emerald-500/35 rounded-xl p-3 shadow-md">
-                            <div className="flex items-center gap-2 text-slate-200">
-                              <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                <Award className="w-3.5 h-3.5 animate-pulse" />
-                              </div>
-                              <span className="font-black text-[10px] uppercase tracking-wider">{t.totalScore.replace(":", "")}</span>
-                            </div>
-                            <span className="text-emerald-300 font-black text-xs font-mono bg-[#1e2552]/80 px-2.5 py-0.5 rounded-lg border border-[#3f509d]/40 shadow-inner">
-                              {currentScore}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between w-full bg-gradient-to-r from-[#f59e0b]/15 to-amber-500/5 border border-amber-500/35 rounded-xl p-3 shadow-md">
-                            <div className="flex items-center gap-2 text-slate-200">
-                              <div className="p-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                <Trophy className="w-3.5 h-3.5 animate-bounce" />
-                              </div>
-                              <span className="font-black text-[10px] uppercase tracking-wider">{t.highScore.replace(":", "")}</span>
-                            </div>
-                            <span className="text-amber-300 font-black text-xs font-mono bg-[#1e2552]/80 px-2.5 py-0.5 rounded-lg border border-[#3f509d]/40 shadow-inner">
-                              {currentHighScore}
-                            </span>
-                          </div>
-                        </div>
-
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                          {t.challengeLevel}
-                        </span>
-                        {/* Consistent 3-column layout as requested by user */}
-                        <div className="grid grid-cols-3 gap-2">
-                          {([
-                            { key: "3x4", label: t.boardSizeLabels["3x4"] },
-                            { key: "4x5", label: t.boardSizeLabels["4x5"] },
-                            { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                            { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                            { key: "6x8", label: t.boardSizeLabels["6x8"] },
-                            { key: "7x8", label: t.boardSizeLabels["7x8"] }
-                          ] as const).map((opt) => {
-                            const isSelected = pendingDifficulty === opt.key;
-                            const isLocked = !isBoardSizeUnlocked(opt.key, "solo");
-                            const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
-                            return (
-                              <button
-                                key={opt.key}
-                                onClick={() => {
-                                  if (isLocked) {
-                                    handleUnlockBoardSize(opt.key, () => {
-                                      setPendingDifficulty(opt.key);
-                                      setPendingMemoryMode("solo");
-                                    });
-                                  } else {
-                                    synth.playSelect();
-                                    if (pendingDifficulty !== opt.key) {
-                                      setPendingDifficulty(opt.key);
-                                      setPendingMemoryMode("solo");
-                                    }
-                                  }
-                                }}
-                                className={`py-2 px-1 rounded-xl text-[11px] font-extrabold transition-colors duration-150 border flex items-center justify-center gap-1 cursor-pointer ${
-                                  isSelected
-                                    ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
-                                    : isLocked
-                                    ? "bg-slate-900 text-amber-300 border border-amber-500/40 shadow-none"
-                                    : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
-                                }`}
-                              >
-                                {isLocked ? (
-                                  <div className="flex items-center gap-1">
-                                    <Video className="w-3 h-3 text-amber-400 fill-amber-400/20 shrink-0" />
-                                    <span>{opt.label}</span>
-                                    <span className="text-[8px] font-black uppercase text-amber-300 bg-amber-400/20 px-1 py-0.2 rounded border border-amber-400/40">AD</span>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1">
-                                    <span>{opt.label}</span>
-                                    {remainingTime && (
-                                      <span className="text-[8px] font-black text-amber-400 bg-amber-400/10 px-1 rounded">{remainingTime}</span>
-                                    )}
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {pendingMemoryMode === "vsBot" && (
-                      <div className="flex flex-col gap-2">
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                          {t.battleInfoTitle}
-                        </span>
-                        <div className="bg-[#1f2856] md:bg-[#303c81]/30 md:backdrop-blur-sm backdrop-blur-none border border-[#546bbf]/20 p-3 rounded-2xl flex flex-col gap-3 shadow-inner">
-                          {/* Rank & Rating Row */}
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <div className={`p-2 rounded-xl border ${currentRank.bg} ${currentRank.border} ${currentRank.shadow} shadow-md shrink-0`}>
-                                {currentRank.badgeType === "shield" ? (
-                                  <Shield className={`w-5 h-5 ${currentRank.color}`} fill={currentRank.fill} />
-                                ) : (
-                                  <Crown className={`w-5 h-5 ${currentRank.color}`} fill={currentRank.fill} />
-                                )}
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Rank</span>
-                                <span className={`font-black text-sm uppercase ${currentRank.color}`}>
-                                  {t[currentRank.nameKey]}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div className="flex flex-col items-end shrink-0">
-                              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">
-                                {t.ratingLabel}
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                <Trophy className="w-4 h-4 text-amber-400" />
-                                <span className="text-amber-300 font-mono font-black text-sm">
-                                  {vsBotTrophies}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Progress bar */}
-                          <div className="flex flex-col gap-2 w-full border-t border-slate-800/40 pt-2.5">
-                            <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-300">
-                              <span>
-                                {t.progressLabel}
-                              </span>
-                              <span className="font-mono text-cyan-400 font-black text-xs sm:text-sm">
-                                {rankProgressDisplay}
-                              </span>
-                            </div>
-                            <div className="w-full h-6 sm:h-7 bg-slate-900 rounded-full overflow-hidden border border-slate-700/60 p-0.5 relative">
-                              <div 
-                                className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 rounded-full transition-all duration-700 ease-out"
-                                style={{ width: `${rankProgressPercentage}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {pendingMemoryMode === "twoPlayers" && (
-                      <div className="flex flex-col gap-2">
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                          {t.twoPlayersMatch}
-                        </span>
-                        <div className="bg-[#1f2856] md:bg-[#303c81]/30 md:backdrop-blur-sm backdrop-blur-none border border-[#546bbf]/20 p-3 rounded-2xl flex flex-col gap-2 shadow-inner">
-                          <div className="grid grid-cols-2 gap-3">
-                            {/* Player 1 */}
-                            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-white/5">
-                              <div className="flex items-center gap-1.5 text-slate-350">
-                                <span className="w-2.5 h-2.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)] animate-pulse" />
-                                <span className="font-extrabold text-[10px] uppercase tracking-wider">P1</span>
-                              </div>
-                              <span className="text-blue-300 font-black text-xs font-mono bg-blue-950/40 px-2 py-1 rounded-lg border border-blue-900/30">
-                                {winsP1}
-                              </span>
-                            </div>
-
-                            {/* Player 2 */}
-                            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-white/5">
-                              <div className="flex items-center gap-1.5 text-slate-350">
-                                <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.8)] animate-pulse" />
-                                <span className="font-extrabold text-[10px] uppercase tracking-wider">P2</span>
-                              </div>
-                              <span className="text-rose-300 font-black text-xs font-mono bg-rose-950/40 px-2 py-1 rounded-lg border border-rose-900/30">
-                                {winsP2}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Board Size Selection for 2 Players */}
-                          <div className="flex flex-col gap-1 mt-1 border-t border-white/5 pt-2">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                              {t.challengeLevel}
-                            </span>
-                            <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-1.5">
-                              {([
-                                { key: "5x5", label: t.boardSizeLabels["5x5"] },
-                                { key: "6x6", label: t.boardSizeLabels["6x6"] },
-                                { key: "6x8", label: t.boardSizeLabels["6x8"] },
-                                { key: "7x8", label: t.boardSizeLabels["7x8"] }
-                              ] as const).map((opt) => {
-                                const isSelected = pendingDifficulty === opt.key;
-                                const isLocked = !isBoardSizeUnlocked(opt.key, "twoPlayers");
-                                const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
-                                return (
-                                  <button
-                                    key={opt.key}
-                                    onClick={() => {
-                                      if (isLocked) {
-                                        handleUnlockBoardSize(opt.key, () => {
-                                          setPendingDifficulty(opt.key);
-                                          setPendingMemoryMode("twoPlayers");
-                                        });
-                                      } else {
-                                        synth.playSelect();
-                                        if (pendingDifficulty !== opt.key) {
-                                          setPendingDifficulty(opt.key);
-                                          setPendingMemoryMode("twoPlayers");
-                                        }
-                                      }
-                                    }}
-                                    className={`py-1 rounded-lg text-[10px] font-black transition-colors duration-150 border flex items-center justify-center gap-1 cursor-pointer ${
-                                      isSelected
-                                        ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
-                                        : isLocked
-                                        ? "bg-slate-900 text-amber-300 border border-amber-500/40 shadow-none"
-                                        : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
-                                    }`}
-                                  >
-                                    {isLocked ? (
-                                      <div className="flex items-center gap-1">
-                                        <Video className="w-2.5 h-2.5 text-amber-400 fill-amber-400/20 shrink-0" />
-                                        <span>{opt.label}</span>
-                                        <span className="text-[7.5px] font-black uppercase text-amber-300 bg-amber-400/20 px-0.5 rounded border border-amber-400/40">AD</span>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center gap-1">
-                                        <span>{opt.label}</span>
-                                        {remainingTime && (
-                                          <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-0.5 rounded">{remainingTime}</span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Reset Wins & Info */}
-                        <div className="flex items-center justify-between px-1 mt-1">
-                          <span className="text-[10px] font-semibold text-slate-400">
-                            {t.localPassAndPlay}
+              {/* Floating Menu Content Framed with Royal Panel Frame Style */}
+              <div 
+                id="mobile-menu-content"
+                className={`relative z-10 w-full ${!isPortrait ? "max-w-4xl max-h-[min(97dvh,600px)]" : "max-w-lg max-h-[min(82dvh,620px)]"} h-full flex flex-col items-center justify-center animate-scale-up`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <RoyalPanelFrame
+                  title="MAIN MENU"
+                  ribbonColor="gold"
+                  showCrown={false}
+                  className="w-full h-full max-h-full"
+                >
+                  <div className={`w-full h-full flex flex-col min-h-0 ${!isPortrait ? "overflow-hidden p-2 sm:p-3 pt-1 sm:pt-2" : "overflow-y-auto p-2 sm:p-3 custom-scrollbar"}`}>
+                    {!isPortrait ? (
+                      renderMobileLandscapeMenu()
+                    ) : (
+                      /* SINGLE UNIFIED RESPONSIVE COMPACT LAYOUT FOR PORTRAIT */
+                      <div className="flex-1 flex flex-col gap-2 sm:gap-2.5 max-w-lg mx-auto w-full pt-1">
+                        {/* 1. PLAY MODE SELECTOR */}
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                            {t.playModeLabel}
                           </span>
+                          <div className="bg-[#182352]/70 border border-[#485da6]/30 p-1.5 sm:p-2 rounded-2xl shadow-none grid grid-cols-3 gap-1.5 sm:gap-2">
+                            {/* Classic */}
+                            <button
+                              onClick={() => {
+                                synth.playSelect();
+                                if (pendingMemoryMode !== "solo") {
+                                  setPendingDifficulty("3x4");
+                                  setPendingMemoryMode("solo");
+                                }
+                              }}
+                              className={`py-2 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-0.5 cursor-pointer ${
+                                pendingMemoryMode === "solo"
+                                  ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                                  : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
+                              }`}
+                            >
+                              <Zap className={`w-4 h-4 ${pendingMemoryMode === "solo" ? "text-slate-950" : "text-amber-400"}`} />
+                              <span>Classic</span>
+                            </button>
+
+                            {/* 2 Players */}
+                            <button
+                              onClick={() => {
+                                synth.playSelect();
+                                if (pendingMemoryMode !== "twoPlayers") {
+                                  const finalDiff = (pendingDifficulty === "5x5" || pendingDifficulty === "5x6" || pendingDifficulty === "6x6" || pendingDifficulty === "6x8") ? pendingDifficulty : "5x5";
+                                  setPendingDifficulty(finalDiff);
+                                  setPendingMemoryMode("twoPlayers");
+                                }
+                              }}
+                              className={`py-2 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-0.5 cursor-pointer ${
+                                pendingMemoryMode === "twoPlayers"
+                                  ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                                  : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
+                              }`}
+                            >
+                              <Users className={`w-4 h-4 ${pendingMemoryMode === "twoPlayers" ? "text-slate-950" : "text-rose-400"}`} />
+                              <span>2 Players</span>
+                            </button>
+
+                            {/* Challenge Mode */}
+                            <button
+                              onClick={() => {
+                                synth.playSelect();
+                                if (pendingMemoryMode !== "vsBot") {
+                                  const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
+                                  setPendingDifficulty(finalDiff);
+                                  setPendingMemoryMode("vsBot");
+                                }
+                              }}
+                              className={`py-2 px-1 rounded-xl text-xs font-extrabold transition-colors duration-150 border flex flex-col items-center gap-0.5 cursor-pointer ${
+                                pendingMemoryMode === "vsBot"
+                                  ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                                  : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
+                              }`}
+                            >
+                              <Bot className={`w-4 h-4 ${pendingMemoryMode === "vsBot" ? "text-slate-950" : "text-cyan-400"}`} />
+                              <span>{t.modeBattle}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 2. DYNAMIC INFORMATION SECTION */}
+                        <div className="shrink-0 flex flex-col gap-1.5">
+                          {pendingMemoryMode === "solo" && (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                                {t.modeClassic}
+                              </span>
+                              <div className="bg-[#1f2856] md:bg-[#303c81]/30 backdrop-blur-none border border-[#546bbf]/20 p-2.5 sm:p-3 rounded-2xl flex flex-col gap-2 shadow-inner">
+                                {/* Score & High Score Row */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="flex items-center justify-between p-1.5 sm:p-2 rounded-xl bg-slate-950/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5 text-slate-300">
+                                      <Award className="w-3.5 h-3.5 text-emerald-400 shrink-0 animate-pulse" />
+                                      <span className="font-extrabold text-[10px] uppercase tracking-wider">{t.totalScore.replace(":", "")}</span>
+                                    </div>
+                                    <span className="text-emerald-300 font-black text-xs font-mono bg-emerald-950/50 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                                      {currentScore}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between p-1.5 sm:p-2 rounded-xl bg-slate-950/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5 text-slate-300">
+                                      <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                      <span className="font-extrabold text-[10px] uppercase tracking-wider">{t.highScore.replace(":", "")}</span>
+                                    </div>
+                                    <span className="text-amber-300 font-black text-xs font-mono bg-amber-950/50 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                                      {currentHighScore}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Board Size Selection for Classic */}
+                                <div className="flex flex-col gap-1 border-t border-white/5 pt-1.5">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                    {t.challengeLevel}
+                                  </span>
+                                  <div className="grid grid-cols-3 gap-1.5">
+                                    {([
+                                      { key: "3x4", label: t.boardSizeLabels["3x4"] },
+                                      { key: "4x5", label: t.boardSizeLabels["4x5"] },
+                                      { key: "5x5", label: t.boardSizeLabels["5x5"] },
+                                      { key: "6x6", label: t.boardSizeLabels["6x6"] },
+                                      { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                                      { key: "7x8", label: t.boardSizeLabels["7x8"] }
+                                    ] as const).map((opt) => {
+                                      const isSelected = pendingDifficulty === opt.key;
+                                      const isLocked = !isBoardSizeUnlocked(opt.key, "solo");
+                                      const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
+                                      return (
+                                        <button
+                                          key={opt.key}
+                                          onClick={() => {
+                                            if (isLocked) {
+                                              handleUnlockBoardSize(opt.key, () => {
+                                                setPendingDifficulty(opt.key);
+                                                setPendingMemoryMode("solo");
+                                              });
+                                            } else {
+                                              synth.playSelect();
+                                              if (pendingDifficulty !== opt.key) {
+                                                setPendingDifficulty(opt.key);
+                                                setPendingMemoryMode("solo");
+                                              }
+                                            }
+                                          }}
+                                          className={`py-1.5 px-1 rounded-xl text-[10.5px] font-extrabold transition-colors duration-150 border flex items-center justify-center gap-1 cursor-pointer ${
+                                            isSelected
+                                              ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                                              : isLocked
+                                              ? "bg-slate-900 text-amber-300 border border-amber-500/40 shadow-none"
+                                              : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
+                                          }`}
+                                        >
+                                          {isLocked ? (
+                                            <div className="flex items-center gap-1">
+                                              <Video className="w-3 h-3 text-amber-400 fill-amber-400/20 shrink-0" />
+                                              <span>{opt.label}</span>
+                                              <span className="text-[7.5px] font-black uppercase text-amber-300 bg-amber-400/20 px-0.5 rounded border border-amber-400/40">AD</span>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1">
+                                              <span>{opt.label}</span>
+                                              {remainingTime && (
+                                                <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-0.5 rounded">{remainingTime}</span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {pendingMemoryMode === "vsBot" && (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                                {t.battleInfoTitle}
+                              </span>
+                              <div className="bg-[#1f2856] md:bg-[#303c81]/30 md:backdrop-blur-sm backdrop-blur-none border border-[#546bbf]/20 p-2.5 sm:p-3 rounded-2xl flex flex-col gap-2.5 shadow-inner">
+                                {/* Rank & Rating Row */}
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-xl border ${currentRank.bg} ${currentRank.border} ${currentRank.shadow} shadow-md shrink-0`}>
+                                      {currentRank.badgeType === "shield" ? (
+                                        <Shield className={`w-4.5 h-4.5 ${currentRank.color}`} fill={currentRank.fill} />
+                                      ) : (
+                                        <Crown className={`w-4.5 h-4.5 ${currentRank.color}`} fill={currentRank.fill} />
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-[8.5px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5">Rank</span>
+                                      <span className={`font-black text-xs sm:text-sm uppercase ${currentRank.color}`}>
+                                        {t[currentRank.nameKey]}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex flex-col items-end shrink-0">
+                                    <span className="text-[8.5px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5">
+                                      {t.ratingLabel}
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                                      <span className="text-amber-300 font-mono font-black text-xs sm:text-sm">
+                                        {vsBotTrophies}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Progress bar */}
+                                <div className="flex flex-col gap-1.5 w-full border-t border-slate-800/40 pt-2">
+                                  <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-300">
+                                    <span>
+                                      {t.progressLabel}
+                                    </span>
+                                    <span className="font-mono text-cyan-400 font-black text-xs">
+                                      {rankProgressDisplay}
+                                    </span>
+                                  </div>
+                                  <div className="w-full h-5 sm:h-6 bg-slate-900 rounded-full overflow-hidden border border-slate-700/60 p-0.5 relative">
+                                    <div 
+                                      className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 rounded-full transition-all duration-700 ease-out"
+                                      style={{ width: `${rankProgressPercentage}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {pendingMemoryMode === "twoPlayers" && (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                                {t.twoPlayersMatch}
+                              </span>
+                              <div className="bg-[#1f2856] md:bg-[#303c81]/30 md:backdrop-blur-sm backdrop-blur-none border border-[#546bbf]/20 p-2.5 sm:p-3 rounded-2xl flex flex-col gap-2 shadow-inner">
+                                <div className="grid grid-cols-2 gap-2">
+                                  {/* Player 1 */}
+                                  <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-950/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5 text-slate-350">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)] animate-pulse" />
+                                      <span className="font-extrabold text-[10px] uppercase tracking-wider">P1</span>
+                                    </div>
+                                    <span className="text-blue-300 font-black text-xs font-mono bg-blue-950/40 px-2 py-0.5 rounded-lg border border-blue-900/30">
+                                      {winsP1}
+                                    </span>
+                                  </div>
+
+                                  {/* Player 2 */}
+                                  <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-950/40 border border-white/5">
+                                    <div className="flex items-center gap-1.5 text-slate-350">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.8)] animate-pulse" />
+                                      <span className="font-extrabold text-[10px] uppercase tracking-wider">P2</span>
+                                    </div>
+                                    <span className="text-rose-300 font-black text-xs font-mono bg-rose-950/40 px-2 py-0.5 rounded-lg border border-rose-900/30">
+                                      {winsP2}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Board Size Selection for 2 Players */}
+                                <div className="flex flex-col gap-1 mt-0.5 border-t border-white/5 pt-1.5">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                    {t.challengeLevel}
+                                  </span>
+                                  <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-1.5">
+                                    {([
+                                      { key: "5x5", label: t.boardSizeLabels["5x5"] },
+                                      { key: "6x6", label: t.boardSizeLabels["6x6"] },
+                                      { key: "6x8", label: t.boardSizeLabels["6x8"] },
+                                      { key: "7x8", label: t.boardSizeLabels["7x8"] }
+                                    ] as const).map((opt) => {
+                                      const isSelected = pendingDifficulty === opt.key;
+                                      const isLocked = !isBoardSizeUnlocked(opt.key, "twoPlayers");
+                                      const remainingTime = getRemainingBoardSizeUnlockTimeText(opt.key);
+                                      return (
+                                        <button
+                                          key={opt.key}
+                                          onClick={() => {
+                                            if (isLocked) {
+                                              handleUnlockBoardSize(opt.key, () => {
+                                                setPendingDifficulty(opt.key);
+                                                setPendingMemoryMode("twoPlayers");
+                                              });
+                                            } else {
+                                              synth.playSelect();
+                                              if (pendingDifficulty !== opt.key) {
+                                                setPendingDifficulty(opt.key);
+                                                setPendingMemoryMode("twoPlayers");
+                                              }
+                                            }
+                                          }}
+                                          className={`py-1 rounded-lg text-[10px] font-black transition-colors duration-150 border flex items-center justify-center gap-1 cursor-pointer ${
+                                            isSelected
+                                              ? "bg-amber-400 text-slate-950 border-transparent font-black shadow-none"
+                                              : isLocked
+                                              ? "bg-slate-900 text-amber-300 border border-amber-500/40 shadow-none"
+                                              : "bg-slate-900/90 text-slate-300 border border-slate-800/80 hover:bg-slate-800 hover:text-white font-bold"
+                                          }`}
+                                        >
+                                          {isLocked ? (
+                                            <div className="flex items-center gap-1">
+                                              <Video className="w-2.5 h-2.5 text-amber-400 fill-amber-400/20 shrink-0" />
+                                              <span>{opt.label}</span>
+                                              <span className="text-[7.5px] font-black uppercase text-amber-300 bg-amber-400/20 px-0.5 rounded border border-amber-400/40">AD</span>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1">
+                                              <span>{opt.label}</span>
+                                              {remainingTime && (
+                                                <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-0.5 rounded">{remainingTime}</span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Reset Wins & Info */}
+                              <div className="flex items-center justify-between px-1 mt-0.5">
+                                <span className="text-[9.5px] font-semibold text-slate-400">
+                                  {t.localPassAndPlay}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    synth.playSelect();
+                                    setShowResetConfirm(true);
+                                  }}
+                                  className="py-0.5 px-2.5 rounded bg-rose-950/60 border border-rose-900/30 text-rose-300 text-[8.5px] font-black uppercase tracking-wider cursor-pointer hover:bg-rose-900/60 active:scale-95 transition-all"
+                                >
+                                  {t.resetWinsText}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* System quick settings inside clean frame */}
+                        <div className="bg-[#182352]/70 border border-[#485da6]/30 p-1.5 rounded-2xl shadow-none grid grid-cols-3 gap-1.5 sm:gap-2 shrink-0">
+                          {/* Sound Toggle */}
                           <button
-                            onClick={() => {
-                              synth.playSelect();
-                              setShowResetConfirm(true);
-                            }}
-                            className="py-1 px-3 rounded bg-rose-950/60 border border-rose-900/30 text-rose-300 text-[9px] font-black uppercase tracking-wider cursor-pointer -translate-y-[2px] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-200 shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
+                            onClick={() => { synth.playSelect(); setSoundOn(!soundOn); }}
+                            className="py-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
+                            title="Toggle Sound"
                           >
-                            {t.resetWinsText}
+                            {soundOn ? <Volume2 className="w-3.5 h-3.5 text-cyan-400" /> : <VolumeX className="w-3.5 h-3.5 text-rose-400" />}
+                            <span>{soundOn ? "Mute" : "Unmute"}</span>
+                          </button>
+
+                          {/* Shop Button */}
+                          <button
+                            onClick={() => { synth.playSelect(); setIsShopOpen(true); }}
+                            className="py-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
+                          >
+                            <Store className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Shop</span>
+                          </button>
+
+                          {/* Settings Button */}
+                          <button
+                            onClick={() => { synth.playSelect(); setIsSettingsOpen(true); }}
+                            className="py-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
+                          >
+                            <Settings className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{t.settingsTitleShort}</span>
                           </button>
                         </div>
+
+                        {/* 4. RESUME / START PLAYING BUTTON */}
+                        <button
+                          onClick={() => {
+                            synth.playSelect();
+                            applyPendingConfigurationAndStartOrResume();
+                          }}
+                          className="w-full py-2 rounded-2xl text-xs font-black bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-none cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2 mt-auto shrink-0 transition-colors duration-150"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>{t.startOrResume}</span>
+                        </button>
                       </div>
                     )}
                   </div>
-
-                  {/* 3. HOW TO PLAY COLLAPSIBLE */}
-                  <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-3 flex flex-col gap-1.5 shrink-0">
-                    <div className="flex items-center gap-2 font-black text-xs text-slate-200">
-                      {menuHelpConfig.iconName === "SquareStack" ? (
-                        <SquareStack className="w-4 h-4 text-cyan-400 shrink-0" />
-                      ) : menuHelpConfig.iconName === "Users" ? (
-                        <Users className="w-4 h-4 text-cyan-400 shrink-0" />
-                      ) : menuHelpConfig.iconName === "Bot" ? (
-                        <Bot className="w-4 h-4 text-cyan-400 shrink-0" />
-                      ) : (
-                        <Info className="w-4 h-4 text-cyan-400 shrink-0" />
-                      )}
-                      <span>{menuHelpConfig.title}</span>
-                    </div>
-                    <p className="text-[9px] sm:text-[10.5px] leading-snug text-slate-400 whitespace-pre-line overflow-y-auto max-h-[120px] border-t border-slate-800/60 pt-2">
-                      {menuHelpConfig.rules}
-                    </p>
-                  </div>
-
-                  {/* System quick settings inside clean 2D frame */}
-                  <div className="bg-[#182046] border border-slate-800/80 p-2.5 rounded-2xl shadow-none grid grid-cols-3 gap-2 shrink-0">
-                    {/* Sound Toggle */}
-                    <button
-                      onClick={() => { synth.playSelect(); setSoundOn(!soundOn); }}
-                      className="py-2.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
-                      title="Toggle Sound"
-                    >
-                      {soundOn ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4 text-rose-400" />}
-                      <span>{soundOn ? "Mute" : "Unmute"}</span>
-                    </button>
-
-                    {/* Shop Button */}
-                    <button
-                      onClick={() => { synth.playSelect(); setIsShopOpen(true); }}
-                      className="py-2.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
-                    >
-                      <Store className="w-4 h-4 text-amber-400" />
-                      <span>Shop</span>
-                    </button>
-
-                    {/* Settings Button */}
-                    <button
-                      onClick={() => { synth.playSelect(); setIsSettingsOpen(true); }}
-                      className="py-2.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/60 text-slate-200 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-colors duration-150"
-                    >
-                      <Settings className="w-4 h-4 text-cyan-400 animate-spin-slow" />
-                      <span>{t.settingsTitleShort}</span>
-                    </button>
-                  </div>
-
-                  {/* 4. RESUME / START PLAYING BUTTON */}
-                  <button
-                    onClick={() => {
-                      synth.playSelect();
-                      applyPendingConfigurationAndStartOrResume();
-                    }}
-                    className="w-full py-3 rounded-2xl text-xs font-black bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-none cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2 mt-auto shrink-0 transition-colors duration-150"
-                  >
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>{t.startOrResume}</span>
-                  </button>
-                </div>
-              )}
+                </RoyalPanelFrame>
+              </div>
             </div>
           )}
 
