@@ -30,8 +30,14 @@ export class AdManager {
   }
 
   public init(): Promise<void> {
-    if (this.provider.init) {
-      return this.provider.init();
+    try {
+      if (this.provider.init) {
+        return Promise.resolve(this.provider.init()).catch((err) => {
+          console.warn("[AdManager] init error:", err);
+        });
+      }
+    } catch (err) {
+      console.warn("[AdManager] init exception:", err);
     }
     return Promise.resolve();
   }
@@ -44,30 +50,62 @@ export class AdManager {
   }
 
   public getActivePlatform(): AdPlatform {
-    return this.provider.name;
+    try {
+      return this.provider.name;
+    } catch {
+      return "mock";
+    }
   }
 
   public gameLoadingFinished(): void {
-    this.provider.gameLoadingFinished();
+    try {
+      this.provider.gameLoadingFinished();
+    } catch (err) {
+      console.warn("[AdManager] gameLoadingFinished error:", err);
+    }
   }
 
   public gameplayStart(): void {
-    this.provider.gameplayStart();
+    try {
+      this.provider.gameplayStart();
+    } catch (err) {
+      console.warn("[AdManager] gameplayStart error:", err);
+    }
   }
 
   public gameplayStop(): void {
-    this.provider.gameplayStop();
+    try {
+      this.provider.gameplayStop();
+    } catch (err) {
+      console.warn("[AdManager] gameplayStop error:", err);
+    }
   }
 
   public async showRewardedAd(): Promise<boolean> {
-    return this.provider.showRewardedAd();
+    try {
+      return await Promise.resolve(this.provider.showRewardedAd()).catch((err) => {
+        console.warn("[AdManager] showRewardedAd promise error:", err);
+        return false;
+      });
+    } catch (err) {
+      console.warn("[AdManager] showRewardedAd exception:", err);
+      return false;
+    }
   }
 
   public async showCommercialAd(): Promise<boolean> {
-    if (this.provider.showCommercialAd) {
-      return this.provider.showCommercialAd();
+    try {
+      if (this.provider.showCommercialAd) {
+        return await Promise.resolve(this.provider.showCommercialAd()).catch((err) => {
+          console.warn("[AdManager] showCommercialAd promise error:", err);
+          return true;
+        });
+      }
+      return true;
+    } catch (err) {
+      console.warn("[AdManager] showCommercialAd exception:", err);
+      return true;
     }
-    return true;
   }
 }
 

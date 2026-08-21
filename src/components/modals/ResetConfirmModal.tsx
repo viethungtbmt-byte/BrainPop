@@ -1,6 +1,7 @@
 import React from "react";
 import { RotateCcw } from "lucide-react";
 import { PanelBackground } from "../PanelBackground";
+import { safeLocalStorage } from "../../utils/safeStorage";
 
 export interface ResetConfirmModalProps {
   showResetConfirm: boolean;
@@ -68,8 +69,8 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
               try { synth.playSelect(); } catch (e) {}
               setWinsP1(0);
               setWinsP2(0);
-              localStorage.removeItem("emoji_brainpop_2p_wins_p1");
-              localStorage.removeItem("emoji_brainpop_2p_wins_p2");
+              safeLocalStorage.removeItem("emoji_brainpop_2p_wins_p1");
+              safeLocalStorage.removeItem("emoji_brainpop_2p_wins_p2");
               setShowResetConfirm(false);
             }}
             className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md touch-manipulation pointer-events-auto"

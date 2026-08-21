@@ -410,21 +410,34 @@ export const EnvironmentalEffects: React.FC<EnvironmentalEffectsProps> = ({ effe
     const canvas = canvasRef.current;
     if (!parent || !canvas) return;
 
+    let resizeRafId: number | null = null;
+
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
       const { width, height } = entries[0].contentRect;
+      if (width <= 0 || height <= 0) return;
       
-      // Update canvas viewport coordinate size matching physical width/height
-      canvas.width = width;
-      canvas.height = height;
+      if (resizeRafId !== null) {
+        cancelAnimationFrame(resizeRafId);
+      }
 
-      // Re-initialize particles to fill the new dimension bounds
-      initParticles(width, height);
+      resizeRafId = requestAnimationFrame(() => {
+        if (!canvas) return;
+        if (canvas.width !== Math.floor(width) || canvas.height !== Math.floor(height)) {
+          canvas.width = Math.floor(width);
+          canvas.height = Math.floor(height);
+          // Re-initialize particles to fill the new dimension bounds
+          initParticles(canvas.width, canvas.height);
+        }
+      });
     });
 
     resizeObserver.observe(parent);
 
     return () => {
+      if (resizeRafId !== null) {
+        cancelAnimationFrame(resizeRafId);
+      }
       resizeObserver.disconnect();
     };
   }, []);

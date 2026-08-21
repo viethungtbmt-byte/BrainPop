@@ -1,3 +1,5 @@
+import { safeLocalStorage } from "../utils/safeStorage";
+
 // Expanded library of creative, distinct bot usernames for Challenge Mode
 export const BOT_NAMES: string[] = [
   // AI & Cyber
@@ -48,7 +50,7 @@ const MAX_RECENT_HISTORY = 40;
 export function getNextBotUsername(): string {
   let recent: string[] = [];
   try {
-    const stored = localStorage.getItem(RECENT_NAMES_KEY);
+    const stored = safeLocalStorage.getItem(RECENT_NAMES_KEY);
     if (stored) {
       recent = JSON.parse(stored);
     }
@@ -76,7 +78,7 @@ export function getNextBotUsername(): string {
   }
 
   try {
-    localStorage.setItem(RECENT_NAMES_KEY, JSON.stringify(recent));
+    safeLocalStorage.setItem(RECENT_NAMES_KEY, JSON.stringify(recent));
   } catch {
     // Ignore storage quota errors
   }

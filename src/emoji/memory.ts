@@ -1,4 +1,5 @@
 import { UNIQUE_EMOJIS } from "./emojis";
+import { safeSessionStorage } from "../utils/safeStorage";
 
 // Helper shuffle function (must match original shuffleArray)
 function shuffleArray<T>(arr: T[]): T[] {
@@ -28,14 +29,12 @@ function getModeHistory(modeKey: string): string[][] {
     return recentModeEmojisCache.get(modeKey) || [];
   }
   try {
-    if (typeof sessionStorage !== "undefined") {
-      const stored = sessionStorage.getItem(`${STORAGE_KEY_PREFIX}${modeKey}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          recentModeEmojisCache.set(modeKey, parsed);
-          return parsed;
-        }
+    const stored = safeSessionStorage.getItem(`${STORAGE_KEY_PREFIX}${modeKey}`);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        recentModeEmojisCache.set(modeKey, parsed);
+        return parsed;
       }
     }
   } catch {
@@ -47,9 +46,7 @@ function getModeHistory(modeKey: string): string[][] {
 function saveModeHistory(modeKey: string, history: string[][]): void {
   recentModeEmojisCache.set(modeKey, history);
   try {
-    if (typeof sessionStorage !== "undefined") {
-      sessionStorage.setItem(`${STORAGE_KEY_PREFIX}${modeKey}`, JSON.stringify(history));
-    }
+    safeSessionStorage.setItem(`${STORAGE_KEY_PREFIX}${modeKey}`, JSON.stringify(history));
   } catch {
     // Ignore storage errors in restricted contexts
   }

@@ -2,6 +2,7 @@ import React from "react";
 import { Video } from "lucide-react";
 import { PanelBackground } from "../PanelBackground";
 import { Language } from "../../locales";
+import { safeLocalStorage } from "../../utils/safeStorage";
 
 export interface GameStartConfirmModalProps {
   showMemoryConfirm: boolean;
@@ -77,7 +78,7 @@ export const GameStartConfirmModal: React.FC<GameStartConfirmModalProps> = ({
 
   const confirmText = getConfirmText();
 
-  const saved = localStorage.getItem("emoji_brainpop_saved_vs_bot_match");
+  const saved = safeLocalStorage.getItem("emoji_brainpop_saved_vs_bot_match");
   let parsedSaved: any = null;
   if (saved) {
     try {
@@ -155,7 +156,7 @@ export const GameStartConfirmModal: React.FC<GameStartConfirmModalProps> = ({
                 id="btn-confirm-new"
                 onClick={() => {
                   synth.playSelect();
-                  localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+                  safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
                   const finalDiff = getBoardSizeForTrophies(vsBotTrophies);
                   setDifficulty(finalDiff);
                   setMemoryMode("vsBot");

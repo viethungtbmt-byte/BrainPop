@@ -8,11 +8,15 @@ export class PokiProvider implements AdProvider {
   private _loadingFinishedCalled: boolean = false;
 
   private get sdk(): any {
-    return (window as any).PokiSDK;
+    return typeof window !== "undefined" ? (window as any).PokiSDK : undefined;
   }
 
   isAvailable(): boolean {
-    return typeof (window as any).PokiSDK !== "undefined";
+    return (
+      typeof window !== "undefined" &&
+      typeof (window as any).PokiSDK !== "undefined" &&
+      !(window as any).__poki_sdk_blocked
+    );
   }
 
   public isPlaying(): boolean {
@@ -21,19 +25,29 @@ export class PokiProvider implements AdProvider {
 
   public init(): Promise<void> {
     if (this.initPromise) return this.initPromise;
-    const sdk = this.sdk;
-    if (sdk && typeof sdk.init === "function") {
-      this.initPromise = sdk
-        .init()
-        .then(() => {
-          console.log("[PokiProvider] PokiSDK initialized successfully");
-        })
-        .catch((err: any) => {
-          console.warn("[PokiProvider] PokiSDK init failed or adblocker active:", err);
-        });
-    } else {
-      this.initPromise = Promise.resolve();
-    }
+
+    this.initPromise = new Promise<void>((resolve) => {
+      try {
+        const sdk = this.sdk;
+        if (sdk && typeof sdk.init === "function") {
+          Promise.resolve(sdk.init())
+            .then(() => {
+              console.log("[PokiProvider] PokiSDK initialized successfully");
+              resolve();
+            })
+            .catch((err: any) => {
+              console.warn("[PokiProvider] PokiSDK init rejected / adblocker:", err);
+              resolve(); // Resolve anyway so game flow never blocks
+            });
+        } else {
+          resolve();
+        }
+      } catch (err) {
+        console.warn("[PokiProvider] PokiSDK init synchronous exception:", err);
+        resolve();
+      }
+    });
+
     return this.initPromise;
   }
 
@@ -42,64 +56,77 @@ export class PokiProvider implements AdProvider {
     this._loadingFinishedCalled = true;
 
     // Ensure SDK init has settled before or alongside gameLoadingFinished
-    this.init().then(() => {
-      const sdk = this.sdk;
-      if (sdk && typeof sdk.gameLoadingFinished === "function") {
+    this.init()
+      .catch(() => {})
+      .then(() => {
         try {
-          sdk.gameLoadingFinished();
+          const sdk = this.sdk;
+          if (sdk && typeof sdk.gameLoadingFinished === "function") {
+            sdk.gameLoadingFinished();
+          }
         } catch (err) {
           console.warn("[PokiProvider] gameLoadingFinished error:", err);
         }
-      }
-    });
+      });
   }
 
   gameplayStart(): void {
     if (this._isPlaying) return; // Prevent duplicate consecutive calls
     this._isPlaying = true;
-    const sdk = this.sdk;
-    if (sdk && typeof sdk.gameplayStart === "function") {
-      try {
+    try {
+      const sdk = this.sdk;
+      if (sdk && typeof sdk.gameplayStart === "function") {
         sdk.gameplayStart();
-      } catch (err) {
-        console.warn("[PokiProvider] gameplayStart error:", err);
       }
+    } catch (err) {
+      console.warn("[PokiProvider] gameplayStart error:", err);
     }
   }
 
   gameplayStop(): void {
     if (!this._isPlaying) return; // Prevent duplicate consecutive calls
     this._isPlaying = false;
-    const sdk = this.sdk;
-    if (sdk && typeof sdk.gameplayStop === "function") {
-      try {
+    try {
+      const sdk = this.sdk;
+      if (sdk && typeof sdk.gameplayStop === "function") {
         sdk.gameplayStop();
-      } catch (err) {
-        console.warn("[PokiProvider] gameplayStop error:", err);
       }
+    } catch (err) {
+      console.warn("[PokiProvider] gameplayStop error:", err);
     }
   }
 
   async showRewardedAd(): Promise<boolean> {
-    await this.init();
+    try {
+      await this.init().catch(() => {});
+    } catch {}
+
     const sdk = this.sdk;
     const wasPlaying = this._isPlaying;
     if (wasPlaying) {
       this.gameplayStop();
     }
-    synth.muteForAd();
+
+    try {
+      synth.muteForAd();
+    } catch {}
 
     try {
       if (sdk && typeof sdk.rewardedBreak === "function") {
-        const withReward = await sdk.rewardedBreak();
-        return Boolean(withReward);
+        const result = await Promise.resolve(sdk.rewardedBreak()).catch((e) => {
+          console.warn("[PokiProvider] rewardedBreak promise rejected:", e);
+          return false;
+        });
+        return Boolean(result);
       }
       return false;
     } catch (err) {
       console.warn("[PokiProvider] rewardedBreak error:", err);
       return false;
     } finally {
-      synth.unmuteAfterAd();
+      try {
+        synth.unmuteAfterAd();
+      } catch {}
       if (wasPlaying) {
         this.gameplayStart();
       }
@@ -107,17 +134,25 @@ export class PokiProvider implements AdProvider {
   }
 
   async showCommercialAd(): Promise<boolean> {
-    await this.init();
+    try {
+      await this.init().catch(() => {});
+    } catch {}
+
     const sdk = this.sdk;
     const wasPlaying = this._isPlaying;
     if (wasPlaying) {
       this.gameplayStop();
     }
-    synth.muteForAd();
+
+    try {
+      synth.muteForAd();
+    } catch {}
 
     try {
       if (sdk && typeof sdk.commercialBreak === "function") {
-        await sdk.commercialBreak();
+        await Promise.resolve(sdk.commercialBreak()).catch((e) => {
+          console.warn("[PokiProvider] commercialBreak promise rejected:", e);
+        });
         return true;
       }
       return true;
@@ -125,7 +160,9 @@ export class PokiProvider implements AdProvider {
       console.warn("[PokiProvider] commercialBreak error:", err);
       return false;
     } finally {
-      synth.unmuteAfterAd();
+      try {
+        synth.unmuteAfterAd();
+      } catch {}
       if (wasPlaying) {
         this.gameplayStart();
       }

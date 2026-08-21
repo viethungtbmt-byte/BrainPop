@@ -1,5 +1,6 @@
 import React, { ErrorInfo, ReactNode } from "react";
 import { RefreshCw, AlertTriangle } from "lucide-react";
+import { safeLocalStorage, safeSessionStorage } from "../utils/safeStorage";
 
 interface Props {
   children: ReactNode;
@@ -33,10 +34,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   private handleReset = () => {
     try {
-      localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
-      localStorage.removeItem("novel_match_memory_flip_state");
-      localStorage.removeItem("novel_match_card_connection_state");
-      sessionStorage.clear();
+      safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+      safeLocalStorage.removeItem("novel_match_memory_flip_state");
+      safeLocalStorage.removeItem("novel_match_card_connection_state");
+      safeSessionStorage.clear();
     } catch (e) {}
     window.location.reload();
   };

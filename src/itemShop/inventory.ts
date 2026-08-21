@@ -1,4 +1,5 @@
 import { InventoryState, CosmeticEffectType } from './itemTypes';
+import { safeLocalStorage } from '../utils/safeStorage';
 
 const STORAGE_KEY = 'emoji_brainpop_inventory';
 
@@ -28,9 +29,9 @@ const DEFAULT_STATE: InventoryState = {
 
 export function getInventoryState(): InventoryState {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
+    const data = safeLocalStorage.getItem(STORAGE_KEY);
     if (!data) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_STATE));
+      safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_STATE));
       return DEFAULT_STATE;
     }
     const parsed = JSON.parse(data);
@@ -148,7 +149,7 @@ export function unlockItem(itemId: string): void {
 
 export function saveInventoryState(state: InventoryState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     console.error('Failed to save inventory state', e);
   }

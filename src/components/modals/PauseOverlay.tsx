@@ -1,6 +1,7 @@
 import React from "react";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { PanelBackground } from "../PanelBackground";
+import { safeLocalStorage } from "../../utils/safeStorage";
 
 export interface PauseOverlayProps {
   isPaused: boolean;
@@ -68,7 +69,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
             type="button"
             onClick={() => {
               synth.playSelect();
-              localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+              safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
               generateMemoryGame(difficulty, undefined, true);
               setIsPaused(false);
             }}

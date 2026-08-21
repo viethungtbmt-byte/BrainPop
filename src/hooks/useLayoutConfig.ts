@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { DisplayConfig, getDisplayConfig } from "../utils/layouts";
 import { getSafariCorrectedViewport, createViewportStabilizer } from "../utils/safariViewportAdapter";
+import { safeLocalStorage, safeSessionStorage } from "../utils/safeStorage";
 
 const getIsPortrait = (): boolean => {
   if (typeof window !== "undefined") {
@@ -33,14 +34,14 @@ export function useLayoutConfig() {
     if (typeof window !== "undefined") {
       // Clear any potentially cached viewport or layout state from previous play sessions
       try {
-        localStorage.removeItem("emoji_brainpop_viewport");
-        localStorage.removeItem("emoji_brainpop_zoom");
-        localStorage.removeItem("emoji_brainpop_dimensions");
-        localStorage.removeItem("emoji_brainpop_layout");
-        sessionStorage.removeItem("emoji_brainpop_viewport");
-        sessionStorage.removeItem("emoji_brainpop_zoom");
-        sessionStorage.removeItem("emoji_brainpop_dimensions");
-        sessionStorage.removeItem("emoji_brainpop_layout");
+        safeLocalStorage.removeItem("emoji_brainpop_viewport");
+        safeLocalStorage.removeItem("emoji_brainpop_zoom");
+        safeLocalStorage.removeItem("emoji_brainpop_dimensions");
+        safeLocalStorage.removeItem("emoji_brainpop_layout");
+        safeSessionStorage.removeItem("emoji_brainpop_viewport");
+        safeSessionStorage.removeItem("emoji_brainpop_zoom");
+        safeSessionStorage.removeItem("emoji_brainpop_dimensions");
+        safeSessionStorage.removeItem("emoji_brainpop_layout");
       } catch (e) {
         // Safe check for private browsing mode where storage might be disabled
       }

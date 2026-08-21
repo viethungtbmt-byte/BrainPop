@@ -104,6 +104,7 @@ import {
 import { useLayoutConfig } from "./hooks/useLayoutConfig";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { PanelBackground } from "./components/PanelBackground";
+import { safeLocalStorage } from "./utils/safeStorage";
 
 export type BoardSizeKey = "3x4" | "4x4" | "4x5" | "5x5" | "5x6" | "6x6" | "6x8" | "7x8";
 
@@ -121,7 +122,7 @@ export default function App() {
   
   // Language configuration ("vi" | "en" | "es" | "pt" | "tr" | "de" | "fr" | "it" | "ru" | "id" | "zh-TW" | "ja" | "ko" | "pl" | "nl" | "th")
   const [language, setLanguage] = useState<Language>((): Language => {
-    const saved = localStorage.getItem("emoji_brainpop_lang");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_lang");
     if (saved && (SUPPORTED_LANGUAGES as string[]).includes(saved)) {
       return saved as Language;
     }
@@ -136,7 +137,7 @@ export default function App() {
 
   // Gentle Snow 3-Game Unlock & Shop Progression state
   const [classicGamesCompleted, setClassicGamesCompleted] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_classic_games_completed");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_classic_games_completed");
     return saved ? parseInt(saved, 10) : 0;
   });
   const [showGentleSnowModal, setShowGentleSnowModal] = useState<boolean>(false);
@@ -157,10 +158,10 @@ export default function App() {
   // Board Size 48-Hour Ad Unlock State per board size (Classic & 2 Players Modes)
   const [boardSizeUnlocks, setBoardSizeUnlocks] = useState<Record<string, number>>(() => {
     try {
-      const saved = localStorage.getItem("emoji_brainpop_board_size_unlocks");
+      const saved = safeLocalStorage.getItem("emoji_brainpop_board_size_unlocks");
       if (saved) return JSON.parse(saved);
       // Migration from old single key if present
-      const oldSaved = localStorage.getItem("emoji_brainpop_board_sizes_unlocked_until");
+      const oldSaved = safeLocalStorage.getItem("emoji_brainpop_board_sizes_unlocked_until");
       if (oldSaved) {
         const ts = parseInt(oldSaved, 10);
         if (ts > Date.now()) {
@@ -191,7 +192,7 @@ export default function App() {
       const newUntil = Date.now() + 48 * 60 * 60 * 1000; // 48 hours
       setBoardSizeUnlocks((prev) => {
         const updated = { ...prev, [targetSizeKey]: newUntil };
-        localStorage.setItem("emoji_brainpop_board_size_unlocks", JSON.stringify(updated));
+        safeLocalStorage.setItem("emoji_brainpop_board_size_unlocks", JSON.stringify(updated));
         return updated;
       });
       synth.playRankUp();
@@ -342,7 +343,7 @@ export default function App() {
 
   // Score states
   const [cardConnectionState, setCardConnectionState] = useState<CardConnectionState>(() => {
-    const saved = localStorage.getItem("novel_match_card_connection_state");
+    const saved = safeLocalStorage.getItem("novel_match_card_connection_state");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -351,13 +352,13 @@ export default function App() {
       }
     }
     // Backward compatibility check for old highscore
-    const oldHigh = localStorage.getItem("novel_match_highscore");
+    const oldHigh = safeLocalStorage.getItem("novel_match_highscore");
     const initialHigh = oldHigh ? parseInt(oldHigh) : 0;
     return { score: 0, highScore: initialHigh };
   });
 
   const [memoryFlipState, setMemoryFlipState] = useState<MemoryFlipState>(() => {
-    const saved = localStorage.getItem("novel_match_memory_flip_state");
+    const saved = safeLocalStorage.getItem("novel_match_memory_flip_state");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -375,7 +376,7 @@ export default function App() {
 
   // Memory flip game timer states
   const [memoryTimeLeft, setMemoryTimeLeft] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_saved_vs_bot_match");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_saved_vs_bot_match");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -391,7 +392,7 @@ export default function App() {
 
   // --- CLASSIC MODE HINT SYSTEM ---
   const [hintsCount, setHintsCount] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_hints_count");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_hints_count");
     if (saved !== null) {
       const val = parseInt(saved, 10);
       return isNaN(val) ? 1 : val;
@@ -406,7 +407,7 @@ export default function App() {
       const nextVal = typeof newVal === "function" ? newVal(prev) : newVal;
       const bounded = Math.max(0, nextVal);
       try {
-        localStorage.setItem("emoji_brainpop_hints_count", bounded.toString());
+        safeLocalStorage.setItem("emoji_brainpop_hints_count", bounded.toString());
       } catch (e) {}
       return bounded;
     });
@@ -416,7 +417,7 @@ export default function App() {
   const [level, setLevel] = useState<number>(1);
   const [levelHistory, setLevelHistory] = useState<Record<number, { from: string; to: string }[]>>(() => {
     try {
-      const saved = localStorage.getItem("novel_match_level_history");
+      const saved = safeLocalStorage.getItem("novel_match_level_history");
       return saved ? JSON.parse(saved) : {};
     } catch (e) {
       return {};
@@ -509,7 +510,7 @@ export default function App() {
   // --- TAB 2: MEMORY FLIP GAME STATE & SYSTEM ---
   // --- SAVED VS BOT MATCH PERSISTENCE & TROPHIES ---
   const savedVsBotMatch = useMemo(() => {
-    const saved = localStorage.getItem("emoji_brainpop_saved_vs_bot_match");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_saved_vs_bot_match");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -521,14 +522,14 @@ export default function App() {
           }
         }
       } catch (e) {}
-      localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+      safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
     }
     return null;
   }, []);
 
   const savedLastMode = useMemo(() => {
     try {
-      const saved = localStorage.getItem("emoji_brainpop_last_mode");
+      const saved = safeLocalStorage.getItem("emoji_brainpop_last_mode");
       if (saved === "twoPlayers" || saved === "vsBot" || saved === "solo") {
         return saved as "solo" | "twoPlayers" | "vsBot";
       }
@@ -546,9 +547,9 @@ export default function App() {
   const p2pWinsUpdatedRef = useRef<boolean>(false);
 
   const [vsBotTrophies, setVsBotTrophies] = useState<number>(() => {
-    const savedNew = localStorage.getItem("emoji_brainpop_vs_bot_trophies");
+    const savedNew = safeLocalStorage.getItem("emoji_brainpop_vs_bot_trophies");
     if (savedNew !== null) return parseInt(savedNew);
-    const savedOld = localStorage.getItem("emoji_brainpop_vs_bot_rating");
+    const savedOld = safeLocalStorage.getItem("emoji_brainpop_vs_bot_rating");
     if (savedOld !== null) return parseInt(savedOld);
     return 0;
   });
@@ -561,19 +562,19 @@ export default function App() {
     setMemoryModeState(prev => {
       const nextMode = typeof action === "function" ? action(prev) : action;
       try {
-        localStorage.setItem("emoji_brainpop_last_mode", nextMode);
+        safeLocalStorage.setItem("emoji_brainpop_last_mode", nextMode);
       } catch (e) {}
       return nextMode;
     });
   }, []);
 
   const [winsP1, setWinsP1] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_2p_wins_p1");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_2p_wins_p1");
     return saved !== null ? parseInt(saved, 10) : 0;
   });
 
   const [winsP2, setWinsP2] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_2p_wins_p2");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_2p_wins_p2");
     return saved !== null ? parseInt(saved, 10) : 0;
   });
 
@@ -893,15 +894,22 @@ export default function App() {
       calculateSizing();
     });
 
+    let observerRafId: number | null = null;
+
     const observer = new ResizeObserver((entries) => {
       if (isMobileConfigOpen || isOrienting) return;
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          calculateSizing(undefined, entry.contentRect.width, entry.contentRect.height);
-        } else {
-          calculateSizing();
-        }
+      if (observerRafId !== null) {
+        cancelAnimationFrame(observerRafId);
       }
+      observerRafId = requestAnimationFrame(() => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            calculateSizing(undefined, entry.contentRect.width, entry.contentRect.height);
+          } else {
+            calculateSizing();
+          }
+        }
+      });
     });
 
     if (gridWrapperRef.current) {
@@ -912,6 +920,9 @@ export default function App() {
 
     return () => {
       cancelAnimationFrame(rafId);
+      if (observerRafId !== null) {
+        cancelAnimationFrame(observerRafId);
+      }
       observer.disconnect();
     };
   }, [calculateSizing, activeTab, isMobileConfigOpen, isOrienting]);
@@ -1241,7 +1252,7 @@ export default function App() {
       [levelIndex]: selectedPairs
     };
     setLevelHistory(updatedHistory);
-    localStorage.setItem("novel_match_level_history", JSON.stringify(updatedHistory));
+    safeLocalStorage.setItem("novel_match_level_history", JSON.stringify(updatedHistory));
 
     // pool all 6 emojis of matching pairs and shuffle globally (allow A-to-A, matching random cards anywhere!)
     const allEmojis = selectedPairs.flatMap(p => [p.from, p.to]);
@@ -1269,7 +1280,7 @@ export default function App() {
 
     if (effectiveMode === "vsBot") {
       if (!forceNewGame) {
-        const saved = localStorage.getItem("emoji_brainpop_saved_vs_bot_match");
+        const saved = safeLocalStorage.getItem("emoji_brainpop_saved_vs_bot_match");
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
@@ -1292,7 +1303,7 @@ export default function App() {
           } catch (e) {}
         }
       }
-      localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+      safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
     }
 
     setMatchSessionId(Date.now().toString());
@@ -1354,7 +1365,7 @@ export default function App() {
       botThinkingTimerRef.current = null;
     }
     setIsPaused(false);
-    if (localStorage.getItem("emoji_brainpop_demo_played") !== "true") {
+    if (safeLocalStorage.getItem("emoji_brainpop_demo_played") !== "true") {
       demoHasStartedRef.current = false;
       setTutorialStep(0);
     }
@@ -1546,7 +1557,7 @@ export default function App() {
     }
 
     if (memoryMode === "vsBot") {
-      const saved = localStorage.getItem("emoji_brainpop_saved_vs_bot_match");
+      const saved = safeLocalStorage.getItem("emoji_brainpop_saved_vs_bot_match");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -1577,7 +1588,7 @@ export default function App() {
 
   // One-time interactive guided tutorial sequence for first-time players
   useEffect(() => {
-    const hasPlayedDemo = localStorage.getItem("emoji_brainpop_demo_played") === "true";
+    const hasPlayedDemo = safeLocalStorage.getItem("emoji_brainpop_demo_played") === "true";
     if (
       !hasPlayedDemo &&
       !demoHasStartedRef.current &&
@@ -1597,7 +1608,7 @@ export default function App() {
         setTutorialCardB(cardBIndex);
         setTutorialStep(1); // Step 1: Highlight Card A and show finger pointer
       } else {
-        localStorage.setItem("emoji_brainpop_demo_played", "true");
+        safeLocalStorage.setItem("emoji_brainpop_demo_played", "true");
       }
     }
   }, [memoryCards.length, memoryMode, activeTab, difficulty, memoryFinished]);
@@ -1624,7 +1635,7 @@ export default function App() {
   useEffect(() => {
     if (tutorialStep === 2 && (memoryMatched.includes(tutorialCardA) || memoryMatched.includes(tutorialCardB))) {
       setTutorialStep(0);
-      localStorage.setItem("emoji_brainpop_demo_played", "true");
+      safeLocalStorage.setItem("emoji_brainpop_demo_played", "true");
     }
   }, [memoryMatched, tutorialStep, tutorialCardA, tutorialCardB]);
 
@@ -1646,9 +1657,9 @@ export default function App() {
             const flipEfficiencyBonus = Math.round(Math.max(0, 1000 - memoryMoves * 10) / 100);
             const rawScore = basePoints + timeBonus + flipEfficiencyBonus;
 
-            const prevGames = parseInt(localStorage.getItem("emoji_brainpop_classic_games_completed") || "0", 10);
+            const prevGames = parseInt(safeLocalStorage.getItem("emoji_brainpop_classic_games_completed") || "0", 10);
             const newGamesCount = prevGames + 1;
-            localStorage.setItem("emoji_brainpop_classic_games_completed", newGamesCount.toString());
+            safeLocalStorage.setItem("emoji_brainpop_classic_games_completed", newGamesCount.toString());
             setClassicGamesCompleted(newGamesCount);
 
             setMemoryFlipState(prev => {
@@ -1658,7 +1669,7 @@ export default function App() {
                 score: newScore,
                 highScore: Math.max(prev.highScore, rawScore)
               };
-              localStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
+              safeLocalStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
               return updated;
             });
             synth.playVictory();
@@ -1669,7 +1680,7 @@ export default function App() {
           setShowVictoryCelebration(false);
           setMemoryBusy(false);
           isClickProcessingRef.current = false;
-          localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+          safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
         }
       }, 350);
       return () => clearTimeout(timer);
@@ -1715,9 +1726,9 @@ export default function App() {
         matchSessionId,
         botUsername,
       };
-      localStorage.setItem("emoji_brainpop_saved_vs_bot_match", JSON.stringify(stateToSave));
+      safeLocalStorage.setItem("emoji_brainpop_saved_vs_bot_match", JSON.stringify(stateToSave));
     } else if (memoryFinished || isCompleted) {
-      localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+      safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
     }
   }, [
     memoryMode,
@@ -1745,11 +1756,11 @@ export default function App() {
       const trophyChange = p1Score - p2Score;
       setVsBotTrophies(prev => {
         const nextTrophies = Math.max(0, prev + trophyChange);
-        localStorage.setItem("emoji_brainpop_vs_bot_trophies", nextTrophies.toString());
-        localStorage.setItem("emoji_brainpop_vs_bot_rating", nextTrophies.toString());
+        safeLocalStorage.setItem("emoji_brainpop_vs_bot_trophies", nextTrophies.toString());
+        safeLocalStorage.setItem("emoji_brainpop_vs_bot_rating", nextTrophies.toString());
         return nextTrophies;
       });
-      localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+      safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
     }
   }, [memoryFinished, memoryMode, p1Score, p2Score]);
 
@@ -1760,13 +1771,13 @@ export default function App() {
       if (p1Score > p2Score) {
         setWinsP1(prev => {
           const nextVal = prev + 1;
-          localStorage.setItem("emoji_brainpop_2p_wins_p1", nextVal.toString());
+          safeLocalStorage.setItem("emoji_brainpop_2p_wins_p1", nextVal.toString());
           return nextVal;
         });
       } else if (p2Score > p1Score) {
         setWinsP2(prev => {
           const nextVal = prev + 1;
-          localStorage.setItem("emoji_brainpop_2p_wins_p2", nextVal.toString());
+          safeLocalStorage.setItem("emoji_brainpop_2p_wins_p2", nextVal.toString());
           return nextVal;
         });
       }
@@ -1805,7 +1816,7 @@ export default function App() {
           score: newScore,
           highScore: newHighScore,
         };
-        localStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
+        safeLocalStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
         return updated;
       });
       synth.playRankUp();
@@ -1823,8 +1834,8 @@ export default function App() {
         const bonusTrophies = diffValue;
         setVsBotTrophies(prev => {
           const next = prev + bonusTrophies;
-          localStorage.setItem("emoji_brainpop_vs_bot_trophies", next.toString());
-          localStorage.setItem("emoji_brainpop_vs_bot_rating", next.toString());
+          safeLocalStorage.setItem("emoji_brainpop_vs_bot_trophies", next.toString());
+          safeLocalStorage.setItem("emoji_brainpop_vs_bot_rating", next.toString());
           return next;
         });
       } else if (diffValue < 0) {
@@ -1833,16 +1844,16 @@ export default function App() {
         const recoveryAmount = Math.max(1, Math.floor(lossAmount / 2));
         setVsBotTrophies(prev => {
           const next = prev + recoveryAmount;
-          localStorage.setItem("emoji_brainpop_vs_bot_trophies", next.toString());
-          localStorage.setItem("emoji_brainpop_vs_bot_rating", next.toString());
+          safeLocalStorage.setItem("emoji_brainpop_vs_bot_trophies", next.toString());
+          safeLocalStorage.setItem("emoji_brainpop_vs_bot_rating", next.toString());
           return next;
         });
       } else {
         // DRAW: +1 bonus trophy
         setVsBotTrophies(prev => {
           const next = prev + 1;
-          localStorage.setItem("emoji_brainpop_vs_bot_trophies", next.toString());
-          localStorage.setItem("emoji_brainpop_vs_bot_rating", next.toString());
+          safeLocalStorage.setItem("emoji_brainpop_vs_bot_trophies", next.toString());
+          safeLocalStorage.setItem("emoji_brainpop_vs_bot_rating", next.toString());
           return next;
         });
       }
@@ -2019,7 +2030,7 @@ export default function App() {
           score: newScore,
           highScore: Math.max(prev.highScore, newScore)
         };
-        localStorage.setItem("novel_match_card_connection_state", JSON.stringify(updated));
+        safeLocalStorage.setItem("novel_match_card_connection_state", JSON.stringify(updated));
         return updated;
       });
     } else {
@@ -2081,14 +2092,24 @@ export default function App() {
     if (activeTab !== "connect") return;
 
     let resizeObserver: ResizeObserver | null = null;
+    let connectRafId: number | null = null;
+
     if (containerRef.current) {
       resizeObserver = new ResizeObserver(() => {
-        updateLineCoordinates();
+        if (connectRafId !== null) {
+          cancelAnimationFrame(connectRafId);
+        }
+        connectRafId = requestAnimationFrame(() => {
+          updateLineCoordinates();
+        });
       });
       resizeObserver.observe(containerRef.current);
     }
 
     return () => {
+      if (connectRafId !== null) {
+        cancelAnimationFrame(connectRafId);
+      }
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
@@ -2292,17 +2313,17 @@ export default function App() {
     setLevel(1);
     setStreak(0);
     setLevelHistory({});
-    localStorage.removeItem("novel_match_level_history");
+    safeLocalStorage.removeItem("novel_match_level_history");
 
     // Reset both current scores
     setCardConnectionState(prev => {
       const updated = { ...prev, score: 0 };
-      localStorage.setItem("novel_match_card_connection_state", JSON.stringify(updated));
+      safeLocalStorage.setItem("novel_match_card_connection_state", JSON.stringify(updated));
       return updated;
     });
     setMemoryFlipState(prev => {
       const updated = { ...prev, score: 0 };
-      localStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
+      safeLocalStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
       return updated;
     });
 
@@ -2328,7 +2349,7 @@ export default function App() {
       botThinkingTimerRef.current = null;
     }
     setIsWatchingAd(false);
-    localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+    safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
 
     // Reset game board state to prevent auto-completion re-triggering end-game panel
     setMemoryMatched([]);
@@ -2354,7 +2375,7 @@ export default function App() {
 
   const changeLanguage = (newLang: Language) => {
     setLanguage(newLang);
-    localStorage.setItem("emoji_brainpop_lang", newLang);
+    safeLocalStorage.setItem("emoji_brainpop_lang", newLang);
   };
 
   // --- TAB 2: MEMORY GAME CLICK LOGIC ---
@@ -2377,17 +2398,17 @@ export default function App() {
       if (isCompleted) {
         let gentleSnowUnlockedThisGame = false;
         if (isSolo) {
-          const prevGames = parseInt(localStorage.getItem("emoji_brainpop_classic_games_completed") || "0", 10);
+          const prevGames = parseInt(safeLocalStorage.getItem("emoji_brainpop_classic_games_completed") || "0", 10);
           const newGamesCount = prevGames + 1;
-          localStorage.setItem("emoji_brainpop_classic_games_completed", newGamesCount.toString());
+          safeLocalStorage.setItem("emoji_brainpop_classic_games_completed", newGamesCount.toString());
           setClassicGamesCompleted(newGamesCount);
 
           const isSnowOwned = getInventoryState().ownedItemIds.includes("effect_snow");
-          const alreadyNotified = localStorage.getItem("emoji_brainpop_gentle_snow_unlocked_notified") === "true";
+          const alreadyNotified = safeLocalStorage.getItem("emoji_brainpop_gentle_snow_unlocked_notified") === "true";
 
           if (newGamesCount >= 3 && !isSnowOwned && !alreadyNotified) {
             unlockItem("effect_snow");
-            localStorage.setItem("emoji_brainpop_gentle_snow_unlocked_notified", "true");
+            safeLocalStorage.setItem("emoji_brainpop_gentle_snow_unlocked_notified", "true");
             gentleSnowUnlockedThisGame = true;
           }
 
@@ -2398,7 +2419,7 @@ export default function App() {
               score: newScore,
               highScore: Math.max(prev.highScore, rawScore)
             };
-            localStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
+            safeLocalStorage.setItem("novel_match_memory_flip_state", JSON.stringify(updated));
             return updated;
           });
         }
@@ -2407,7 +2428,7 @@ export default function App() {
         adManager.gameplayStop();
         setShowScoreSummary(true);
         setShowVictoryCelebration(false);
-        localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+        safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
 
         if (isPotentialNewHigh) {
           synth.playHighScore();
@@ -2558,7 +2579,7 @@ export default function App() {
                 adManager.gameplayStop();
                 setShowScoreSummary(true);
                 setShowVictoryCelebration(false);
-                localStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
+                safeLocalStorage.removeItem("emoji_brainpop_saved_vs_bot_match");
               } else {
                 // Consecutive successful turns limited to max 3
                 if (nextConsecutive >= 3) {

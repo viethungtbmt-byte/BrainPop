@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, startTransition } from "react";
 import { generateMemoryBoard } from "../emoji/memory";
 import { BotDifficulty } from "../BOT/types";
+import { safeLocalStorage } from "../utils/safeStorage";
 
 export interface UseMemoryGameProps {
   synth: any;
@@ -57,21 +58,21 @@ export function useMemoryGame({
   // Scores & Trophies
   const [currentScore, setCurrentScore] = useState<number>(0);
   const [vsBotTrophies, setVsBotTrophies] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_vsbot_trophies");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_vsbot_trophies");
     return saved ? parseInt(saved, 10) : 0;
   });
   const [winsP1, setWinsP1] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_2p_wins_p1");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_2p_wins_p1");
     return saved ? parseInt(saved, 10) : 0;
   });
   const [winsP2, setWinsP2] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_2p_wins_p2");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_2p_wins_p2");
     return saved ? parseInt(saved, 10) : 0;
   });
 
   // Hints
   const [hintsCount, setHintsCount] = useState<number>(() => {
-    const saved = localStorage.getItem("emoji_brainpop_hints");
+    const saved = safeLocalStorage.getItem("emoji_brainpop_hints");
     return saved ? parseInt(saved, 10) : 3;
   });
   const [isHintModalOpen, setIsHintModalOpen] = useState<boolean>(false);
@@ -89,7 +90,7 @@ export function useMemoryGame({
   const updateHintsCount = useCallback((updater: (prev: number) => number) => {
     setHintsCount((prev) => {
       const next = Math.max(0, updater(prev));
-      localStorage.setItem("emoji_brainpop_hints", next.toString());
+      safeLocalStorage.setItem("emoji_brainpop_hints", next.toString());
       return next;
     });
   }, []);

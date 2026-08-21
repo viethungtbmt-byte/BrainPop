@@ -238,10 +238,56 @@ export class SoundSynth {
   public enabled: boolean = true;
   private musicInterval: any = null;
   private currentMusicId: string | null = null;
+  private pendingMusicId: string | null = null;
   private activeMusicNodes: any[] = [];
   private preAdEnabledState: boolean = true;
+  private hasUserInteracted: boolean = false;
+  private gestureListenersAttached: boolean = false;
 
-  constructor() {}
+  constructor() {
+    this.attachGestureListeners();
+  }
+
+  private handleUserGesture = () => {
+    this.hasUserInteracted = true;
+    this.detachGestureListeners();
+    this.unlockAudio();
+  };
+
+  private attachGestureListeners() {
+    if (typeof window === "undefined" || this.gestureListenersAttached) return;
+    this.gestureListenersAttached = true;
+    const opts = { capture: true, passive: true };
+    window.addEventListener("pointerdown", this.handleUserGesture, opts);
+    window.addEventListener("touchstart", this.handleUserGesture, opts);
+    window.addEventListener("keydown", this.handleUserGesture, opts);
+    window.addEventListener("click", this.handleUserGesture, opts);
+  }
+
+  private detachGestureListeners() {
+    if (typeof window === "undefined") return;
+    const opts = { capture: true };
+    window.removeEventListener("pointerdown", this.handleUserGesture, opts);
+    window.removeEventListener("touchstart", this.handleUserGesture, opts);
+    window.removeEventListener("keydown", this.handleUserGesture, opts);
+    window.removeEventListener("click", this.handleUserGesture, opts);
+  }
+
+  /**
+   * Unlock AudioContext on demand or on first gesture
+   */
+  public unlockAudio(): void {
+    try {
+      this.init();
+      if (this.pendingMusicId && this.pendingMusicId !== "music_none" && this.enabled) {
+        const toPlay = this.pendingMusicId;
+        this.pendingMusicId = null;
+        this.startMusicSynthesizer(toPlay);
+      }
+    } catch (e) {
+      console.warn("AudioContext unlock error:", e);
+    }
+  }
 
   /**
    * Mute all game audio immediately during commercial / rewarded ad breaks
@@ -250,7 +296,9 @@ export class SoundSynth {
     this.preAdEnabledState = this.enabled;
     this.enabled = false;
     if (this.ctx && this.ctx.state === "running") {
-      this.ctx.suspend().catch(() => {});
+      try {
+        this.ctx.suspend().catch(() => {});
+      } catch (e) {}
     }
   }
 
@@ -260,7 +308,9 @@ export class SoundSynth {
   unmuteAfterAd(): void {
     this.enabled = this.preAdEnabledState;
     if (this.enabled && this.ctx && this.ctx.state === "suspended") {
-      this.ctx.resume().catch(() => {});
+      try {
+        this.ctx.resume().catch(() => {});
+      } catch (e) {}
     }
   }
 
@@ -270,14 +320,26 @@ export class SoundSynth {
       this.stopMusic();
       return;
     }
+
+    this.pendingMusicId = trackId;
+
+    // Respect browser autoplay policy: do not start or resume context before user gesture
+    if (!this.hasUserInteracted) {
+      this.currentMusicId = trackId;
+      return;
+    }
     
     this.init();
     if (!this.ctx) return;
     
-    // If already playing this track, don't restart it
-    if (this.currentMusicId === trackId) return;
-    
-    this.stopMusic();
+    this.startMusicSynthesizer(trackId);
+  }
+
+  private startMusicSynthesizer(trackId: string) {
+    if (!this.enabled || !this.ctx) return;
+    if (this.currentMusicId === trackId && this.musicInterval) return;
+
+    this.stopMusicNodesOnly();
     this.currentMusicId = trackId;
 
     if (trackId === 'music_none') {
@@ -662,7 +724,7 @@ export class SoundSynth {
     tick();
   }
 
-  stopMusic() {
+  private stopMusicNodesOnly() {
     if (this.musicInterval) {
       clearInterval(this.musicInterval);
       this.musicInterval = null;
@@ -678,6 +740,11 @@ export class SoundSynth {
       });
       this.activeMusicNodes = [];
     }
+  }
+
+  stopMusic() {
+    this.pendingMusicId = null;
+    this.stopMusicNodesOnly();
     this.currentMusicId = null;
   }
 
@@ -689,7 +756,7 @@ export class SoundSynth {
           this.ctx = new AudioCtx();
         }
       }
-      if (this.ctx && this.ctx.state === "suspended") {
+      if (this.ctx && this.ctx.state === "suspended" && this.hasUserInteracted) {
         this.ctx.resume().catch(() => {});
       }
     } catch (e) {
@@ -733,175 +800,191 @@ export class SoundSynth {
 
   playConnect() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(523.25, this.ctx.currentTime); // C5
-    osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.08); // E5
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, this.ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.08); // E5
 
-    gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.2);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.2);
+    } catch (e) {
+      console.warn("playConnect error:", e);
+    }
   }
 
   // Brighter and more rewarding successful match sound
   playSuccess() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    // Harmonious major ascending chord (G5, C6, E6, G6) played closely
-    const notes = [783.99, 1046.50, 1318.51, 1567.98];
-    const delayStep = 0.035;
+      // Harmonious major ascending chord (G5, C6, E6, G6) played closely
+      const notes = [783.99, 1046.50, 1318.51, 1567.98];
+      const delayStep = 0.035;
 
-    notes.forEach((freq, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      const filter = this.ctx!.createBiquadFilter();
-      const startTime = this.ctx!.currentTime + index * delayStep;
+      notes.forEach((freq, index) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        const filter = this.ctx!.createBiquadFilter();
+        const startTime = this.ctx!.currentTime + index * delayStep;
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, startTime);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, startTime);
 
-      // Sweet and clean amplitude envelope (~180-250ms)
-      gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.linearRampToValueAtTime(0.06, startTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.12);
+        // Sweet and clean amplitude envelope (~180-250ms)
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.06, startTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.12);
 
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(2000, startTime);
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(2000, startTime);
 
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.ctx!.destination);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx!.destination);
 
-      osc.start(startTime);
-      osc.stop(startTime + 0.13);
-    });
+        osc.start(startTime);
+        osc.stop(startTime + 0.13);
+      });
+    } catch (e) {
+      console.warn("playSuccess error:", e);
+    }
   }
 
   // Short descending tone, softer, non-annoying mismatch sound (~120ms)
   playFailure() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
 
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(260, this.ctx.currentTime); 
-    osc.frequency.linearRampToValueAtTime(150, this.ctx.currentTime + 0.12); // Smooth descending slide
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(260, this.ctx.currentTime); 
+      osc.frequency.linearRampToValueAtTime(150, this.ctx.currentTime + 0.12); // Smooth descending slide
 
-    gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
 
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(600, this.ctx.currentTime);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(600, this.ctx.currentTime);
 
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.ctx.destination);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.13);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.13);
+    } catch (e) {
+      console.warn("playFailure error:", e);
+    }
   }
 
   // Combo Sound System
   playCombo(level: number) {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    if (level === 2) {
-      // Combo x2 - Bright ping
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, this.ctx.currentTime); // A5
-      osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.08);
-
-      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.2);
-    } 
-    else if (level === 3) {
-      // Combo x3 - Slightly higher pitch ping
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(1046.50, this.ctx.currentTime); // C6
-      osc.frequency.exponentialRampToValueAtTime(2093.00, this.ctx.currentTime + 0.08);
-
-      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.14, this.ctx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.22);
-    } 
-    else if (level === 4) {
-      // Combo x4 - Richer harmony (C6, E6, G6, C7 arpeggio)
-      const notes = [1046.50, 1318.51, 1567.98, 2093.00];
-      notes.forEach((freq, index) => {
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-        const startTime = this.ctx!.currentTime + index * 0.025;
-
+      if (level === 2) {
+        // Combo x2 - Bright ping
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
         osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, startTime);
+        osc.frequency.setValueAtTime(880, this.ctx.currentTime); // A5
+        osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.08);
 
-        gain.gain.setValueAtTime(0.001, startTime);
-        gain.gain.linearRampToValueAtTime(0.07, startTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
-
-        osc.connect(gain);
-        gain.connect(this.ctx!.destination);
-
-        osc.start(startTime);
-        osc.stop(startTime + 0.16);
-      });
-    } 
-    else {
-      // Combo x5+ - Small excited fanfare (C5 to G6 run)
-      const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
-      notes.forEach((freq, index) => {
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-        const startTime = this.ctx!.currentTime + index * 0.03;
-
-        osc.type = index === notes.length - 1 ? "triangle" : "sine";
-        osc.frequency.setValueAtTime(freq, startTime);
-
-        gain.gain.setValueAtTime(0.001, startTime);
-        gain.gain.linearRampToValueAtTime(0.06, startTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
+        gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
 
         osc.connect(gain);
-        gain.connect(this.ctx!.destination);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+      } 
+      else if (level === 3) {
+        // Combo x3 - Slightly higher pitch ping
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1046.50, this.ctx.currentTime); // C6
+        osc.frequency.exponentialRampToValueAtTime(2093.00, this.ctx.currentTime + 0.08);
 
-        osc.start(startTime);
-        osc.stop(startTime + 0.2);
-      });
+        gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.14, this.ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.22);
+      } 
+      else if (level === 4) {
+        // Combo x4 - Richer harmony (C6, E6, G6, C7 arpeggio)
+        const notes = [1046.50, 1318.51, 1567.98, 2093.00];
+        notes.forEach((freq, index) => {
+          const osc = this.ctx!.createOscillator();
+          const gain = this.ctx!.createGain();
+          const startTime = this.ctx!.currentTime + index * 0.025;
+
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, startTime);
+
+          gain.gain.setValueAtTime(0.001, startTime);
+          gain.gain.linearRampToValueAtTime(0.07, startTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
+
+          osc.connect(gain);
+          gain.connect(this.ctx!.destination);
+
+          osc.start(startTime);
+          osc.stop(startTime + 0.16);
+        });
+      } 
+      else {
+        // Combo x5+ - Small excited fanfare (C5 to G6 run)
+        const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+        notes.forEach((freq, index) => {
+          const osc = this.ctx!.createOscillator();
+          const gain = this.ctx!.createGain();
+          const startTime = this.ctx!.currentTime + index * 0.03;
+
+          osc.type = index === notes.length - 1 ? "triangle" : "sine";
+          osc.frequency.setValueAtTime(freq, startTime);
+
+          gain.gain.setValueAtTime(0.001, startTime);
+          gain.gain.linearRampToValueAtTime(0.06, startTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
+
+          osc.connect(gain);
+          gain.connect(this.ctx!.destination);
+
+          osc.start(startTime);
+          osc.stop(startTime + 0.2);
+        });
+      }
+    } catch (e) {
+      console.warn("playCombo error:", e);
     }
   }
 
@@ -988,186 +1071,210 @@ export class SoundSynth {
   // Optimistic Victory Jingle (~700-900ms)
   playVictory() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const melody = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50]; // C5 to C6
-    const step = 0.085;
+      const melody = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50]; // C5 to C6
+      const step = 0.085;
 
-    melody.forEach((freq, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      const startTime = this.ctx!.currentTime + index * step;
+      melody.forEach((freq, index) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        const startTime = this.ctx!.currentTime + index * step;
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, startTime);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, startTime);
 
-      gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.linearRampToValueAtTime(0.08, startTime + 0.01);
-      
-      if (index === melody.length - 1) {
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
-      } else {
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.2);
-      }
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.08, startTime + 0.01);
+        
+        if (index === melody.length - 1) {
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
+        } else {
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.2);
+        }
 
-      osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
 
-      osc.start(startTime);
-      osc.stop(startTime + (index === melody.length - 1 ? 0.5 : 0.22));
-    });
+        osc.start(startTime);
+        osc.stop(startTime + (index === melody.length - 1 ? 0.5 : 0.22));
+      });
 
-    // Rich sustained major third/fifth on final note
-    const chord = [1318.51, 1567.98]; // E6, G6
-    const chordStartTime = this.ctx.currentTime + (melody.length - 1) * step;
-    chord.forEach((freq) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
+      // Rich sustained major third/fifth on final note
+      const chord = [1318.51, 1567.98]; // E6, G6
+      const chordStartTime = this.ctx.currentTime + (melody.length - 1) * step;
+      chord.forEach((freq) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, chordStartTime);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, chordStartTime);
 
-      gain.gain.setValueAtTime(0.001, chordStartTime);
-      gain.gain.linearRampToValueAtTime(0.05, chordStartTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, chordStartTime + 0.45);
+        gain.gain.setValueAtTime(0.001, chordStartTime);
+        gain.gain.linearRampToValueAtTime(0.05, chordStartTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, chordStartTime + 0.45);
 
-      osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
 
-      osc.start(chordStartTime);
-      osc.stop(chordStartTime + 0.5);
-    });
+        osc.start(chordStartTime);
+        osc.stop(chordStartTime + 0.5);
+      });
+    } catch (e) {
+      console.warn("playVictory error:", e);
+    }
   }
 
   // Soft click downward for Pausing
   playPause() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(350, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.08);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(350, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.08);
 
-    gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.11);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.11);
+    } catch (e) {
+      console.warn("playPause error:", e);
+    }
   }
 
   // Soft click upward for Resuming
   playResume() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(200, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(350, this.ctx.currentTime + 0.08);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(350, this.ctx.currentTime + 0.08);
 
-    gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.11);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.11);
+    } catch (e) {
+      console.warn("playResume error:", e);
+    }
   }
 
   // Primary buttons (Solid resonant UI click)
   playPrimary() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(523.25, this.ctx.currentTime); // C5
-    osc.frequency.exponentialRampToValueAtTime(783.99, this.ctx.currentTime + 0.06); // rise to G5
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, this.ctx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(783.99, this.ctx.currentTime + 0.06); // rise to G5
 
-    gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
 
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(1500, this.ctx.currentTime);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(1500, this.ctx.currentTime);
 
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.ctx.destination);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.09);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.09);
+    } catch (e) {
+      console.warn("playPrimary error:", e);
+    }
   }
 
   // Secondary buttons (Shorter, softer, lower click)
   playSecondary() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(329.63, this.ctx.currentTime); // E4
-    osc.frequency.exponentialRampToValueAtTime(440.00, this.ctx.currentTime + 0.05); // rise to A4
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(329.63, this.ctx.currentTime); // E4
+      osc.frequency.exponentialRampToValueAtTime(440.00, this.ctx.currentTime + 0.05); // rise to A4
 
-    gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.07);
+      gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.07);
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.08);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.08);
+    } catch (e) {
+      console.warn("playSecondary error:", e);
+    }
   }
 
   // Close dialog (Quick descending double-tap click)
   playClose() {
     if (!this.enabled) return;
-    this.init();
-    if (!this.ctx) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
 
-    const times = [0, 0.04];
-    const notes = [659.25, 523.25]; // E5, then C5
+      const times = [0, 0.04];
+      const notes = [659.25, 523.25]; // E5, then C5
 
-    notes.forEach((freq, idx) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      const startTime = this.ctx!.currentTime + times[idx];
+      notes.forEach((freq, idx) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        const startTime = this.ctx!.currentTime + times[idx];
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, startTime);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, startTime);
 
-      gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.linearRampToValueAtTime(0.07, startTime + 0.006);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.05);
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.07, startTime + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.05);
 
-      osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
 
-      osc.start(startTime);
-      osc.stop(startTime + 0.06);
-    });
+        osc.start(startTime);
+        osc.stop(startTime + 0.06);
+      });
+    } catch (e) {
+      console.warn("playClose error:", e);
+    }
   }
 
   // Confirm dialog (Cheerful quick rising dual-tone chime)
