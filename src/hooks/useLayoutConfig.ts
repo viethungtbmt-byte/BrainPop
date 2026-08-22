@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { DisplayConfig, getDisplayConfig } from "../utils/layouts";
 import { getSafariCorrectedViewport } from "../utils/safariViewportAdapter";
 import { safeLocalStorage, safeSessionStorage } from "../utils/safeStorage";
@@ -42,28 +42,97 @@ export function useLayoutConfig() {
   });
 
   const [isOrienting, setIsOrienting] = useState<boolean>(false);
+  const orientingTimeoutRef = useRef<number | null>(null);
 
+  // Trigger layout recalculation spinner programmatically (e.g., when board size changes)
+  const triggerLayoutRecalculation = useCallback((durationMs: number = 180) => {
+    setIsOrienting(true);
+    if (orientingTimeoutRef.current !== null) {
+      clearTimeout(orientingTimeoutRef.current);
+    }
+    orientingTimeoutRef.current = window.setTimeout(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsOrienting(false);
+        });
+      });
+    }, durationMs);
+  }, []);
+
+  // 1. Mobile & Tablet No-Zoom Protection
   useEffect(() => {
-    // Ensure viewport meta tag is properly set on mobile/tablet
-    const initViewport = () => {
-      let viewportMeta = document.querySelector('meta[name="viewport"]');
-      if (!viewportMeta) {
-        viewportMeta = document.createElement("meta");
-        viewportMeta.setAttribute("name", "viewport");
-        document.head.appendChild(viewportMeta);
+    if (typeof window === "undefined") return;
+
+    // Viewport meta tag configuration
+    let viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (!viewportMeta) {
+      viewportMeta = document.createElement("meta");
+      viewportMeta.setAttribute("name", "viewport");
+      document.head.appendChild(viewportMeta);
+    }
+    viewportMeta.setAttribute(
+      "content",
+      "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    );
+
+    const isTouchDevice = "ontouchstart" in window || (navigator && navigator.maxTouchPoints > 0);
+    if (!isTouchDevice) return;
+
+    // Multi-touch pinch zoom prevention
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches && e.touches.length > 1) {
+        e.preventDefault();
       }
-      viewportMeta.setAttribute(
-        "content",
-        "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
-      );
     };
 
-    initViewport();
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches && e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
 
+    // Double-tap zoom prevention
+    let lastTouchEnd = 0;
+    const handleTouchEnd = (e: TouchEvent) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    };
+
+    // Safari gesture zoom prevention
+    const handleGesture = (e: Event) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener("touchstart", handleTouchStart, { passive: false });
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchend", handleTouchEnd, { passive: false });
+    document.addEventListener("gesturestart", handleGesture, { passive: false });
+    document.addEventListener("gesturechange", handleGesture, { passive: false });
+    document.addEventListener("gestureend", handleGesture, { passive: false });
+
+    return () => {
+      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("gesturestart", handleGesture);
+      document.removeEventListener("gesturechange", handleGesture);
+      document.removeEventListener("gestureend", handleGesture);
+    };
+  }, []);
+
+  // 2. Viewport Resize & Orientation Handler with Loading Spinner Gating
+  useEffect(() => {
     let rafId: number | null = null;
-    let orientationTimeout: number | null = null;
+    let resizeTimer: number | null = null;
 
-    const updateDimensions = () => {
+    const updateDimensions = (withSpinner: boolean = false) => {
+      if (withSpinner) {
+        setIsOrienting(true);
+      }
+
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         const next = getSafariCorrectedViewport();
@@ -73,26 +142,34 @@ export function useLayoutConfig() {
           }
           return { width: next.width, height: next.height };
         });
+
+        if (withSpinner) {
+          if (orientingTimeoutRef.current !== null) clearTimeout(orientingTimeoutRef.current);
+          orientingTimeoutRef.current = window.setTimeout(() => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                setIsOrienting(false);
+              });
+            });
+          }, 180);
+        }
       });
     };
 
     const handleOrientationChange = () => {
-      setIsOrienting(true);
-      updateDimensions();
-
-      if (orientationTimeout !== null) clearTimeout(orientationTimeout);
-      orientationTimeout = window.setTimeout(() => {
-        updateDimensions();
-        setIsOrienting(false);
-      }, 150);
+      updateDimensions(true);
     };
 
     const handleStandardResize = () => {
-      updateDimensions();
+      if (resizeTimer !== null) clearTimeout(resizeTimer);
+      // Small debounce for window resize
+      resizeTimer = window.setTimeout(() => {
+        updateDimensions(false);
+      }, 100);
     };
 
     // Initial sync
-    updateDimensions();
+    updateDimensions(false);
 
     window.addEventListener("resize", handleStandardResize, { passive: true });
     window.addEventListener("orientationchange", handleOrientationChange, { passive: true });
@@ -117,7 +194,8 @@ export function useLayoutConfig() {
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
-      if (orientationTimeout !== null) clearTimeout(orientationTimeout);
+      if (resizeTimer !== null) clearTimeout(resizeTimer);
+      if (orientingTimeoutRef.current !== null) clearTimeout(orientingTimeoutRef.current);
       window.removeEventListener("resize", handleStandardResize);
       window.removeEventListener("orientationchange", handleOrientationChange);
       if (screenOrientation && typeof screenOrientation.removeEventListener === "function") {
@@ -148,6 +226,7 @@ export function useLayoutConfig() {
     config,
     dimensions,
     isOrienting,
+    triggerLayoutRecalculation,
     isPortrait,
     isMobile,
     isTablet,
@@ -159,3 +238,4 @@ export function useLayoutConfig() {
     isTabletLandscape,
   };
 }
+

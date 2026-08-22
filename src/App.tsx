@@ -313,6 +313,7 @@ export default function App() {
   const {
     config: layoutConfig,
     isOrienting,
+    triggerLayoutRecalculation,
     isPortrait,
     isMobile,
     isTablet,
@@ -666,6 +667,15 @@ export default function App() {
     }
     return "3x4";
   });
+
+  // Trigger centered layout recalculation spinner when difficulty / board size changes
+  const prevDifficultyRef = useRef(difficulty);
+  useEffect(() => {
+    if (prevDifficultyRef.current !== difficulty) {
+      prevDifficultyRef.current = difficulty;
+      triggerLayoutRecalculation(180);
+    }
+  }, [difficulty, triggerLayoutRecalculation]);
   const [memoryCards, setMemoryCards] = useState<string[]>(() => {
     return shouldRestoreVsBot ? savedVsBotMatch.memoryCards : [];
   });
@@ -3406,12 +3416,13 @@ export default function App() {
               {/* Floating Menu Content Framed with Royal Panel Frame Style */}
               <div 
                 id="mobile-menu-content"
-                className={`relative z-10 w-full ${!isPortrait ? "max-w-4xl max-h-[min(97dvh,600px)]" : "max-w-lg max-h-[min(82dvh,620px)]"} h-full flex flex-col items-center justify-center animate-scale-up`}
+                className={`relative z-10 w-full ${!isPortrait ? "max-w-4xl max-h-[min(98dvh,480px)]" : "max-w-lg max-h-[min(82dvh,620px)]"} h-full flex flex-col items-center justify-center animate-scale-up`}
                 onClick={(e) => e.stopPropagation()}
               >
                 <RoyalPanelFrame
                   title="MAIN MENU"
                   ribbonColor="gold"
+                  ribbonSize={!isPortrait ? "sm" : "md"}
                   showCrown={false}
                   className="w-full h-full max-h-full"
                 >
@@ -5005,6 +5016,18 @@ export default function App() {
         isWatchingAd={isWatchingAd}
         t={t}
       />
+
+      {/* CENTERED LAYOUT RECALCULATION & ORIENTATION SPINNER OVERLAY */}
+      {isOrienting && (
+        <div
+          id="layout-recalculation-spinner-overlay"
+          className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-auto select-none transition-opacity duration-150"
+        >
+          <div className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-slate-900/95 border border-cyan-500/40 shadow-2xl backdrop-blur-xl gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-3 border-cyan-400/20 border-t-cyan-400 animate-spin" />
+          </div>
+        </div>
+      )}
     </div>
     </div>
   );

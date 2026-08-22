@@ -1,11 +1,14 @@
 @import "tailwindcss";
 
-/* Prevent text selection throughout the game's UI */
+/* Prevent text selection and disable user zoom gestures on touch */
 body, html, #root {
   -webkit-user-select: none; /* Safari */
   -moz-user-select: none;    /* Firefox */
   -ms-user-select: none;     /* IE10+/Edge */
   user-select: none;         /* Standard */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   background: linear-gradient(180deg, #1b223c 0%, #12162a 50%, #19162c 100%);
 }
 
