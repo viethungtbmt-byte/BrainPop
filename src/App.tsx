@@ -112,10 +112,24 @@ export default function App() {
   // Preloader state
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const handleLoadingComplete = () => {
+  const handleLoadingComplete = useCallback(() => {
     setIsLoading(false);
     adManager.gameLoadingFinished();
-  };
+  }, []);
+
+  // Global safety watchdog: guarantee game is never stuck in loading state on mobile
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      setIsLoading((currentlyLoading) => {
+        if (currentlyLoading) {
+          adManager.gameLoadingFinished();
+          return false;
+        }
+        return false;
+      });
+    }, 1000);
+    return () => clearTimeout(safetyTimer);
+  }, []);
 
   // Navigation: "match" for Connecting Cards, "memory" for Memory Flip Game
   const [activeTab, setActiveTab] = useState<"match" | "memory">("memory");
@@ -2783,20 +2797,18 @@ export default function App() {
       {/* BACKGROUND WATERMARK PATTERN - SIT ON THE LOWEST LAYER */}
       <div className="absolute inset-0 pointer-events-none select-none z-0 overflow-hidden">
         {/* Interactive/Ambient decorative colorful glow blobs */}
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-500/12 blur-[120px] pointer-events-none z-0" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/12 blur-[120px] pointer-events-none z-0" />
-        <div className="absolute top-[30%] right-[10%] w-[35%] h-[35%] rounded-full bg-pink-500/8 blur-[100px] pointer-events-none z-0" />
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-500/10 blur-3xl pointer-events-none z-0" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-3xl pointer-events-none z-0" />
+        <div className="absolute top-[30%] right-[10%] w-[35%] h-[35%] rounded-full bg-pink-500/6 blur-3xl pointer-events-none z-0" />
         
-        <svg width="100%" height="100%" className="w-full h-full opacity-[0.05] grayscale">
+        {/* Lightweight SVG Grid Pattern (100% Mobile Safe) */}
+        <svg width="100%" height="100%" className="w-full h-full opacity-[0.06]">
           <defs>
-            <pattern id="bg-emoji-watermark" width="160" height="160" patternUnits="userSpaceOnUse" patternTransform="rotate(-25)">
-              <text x="20" y="30" fontSize="16" fill="#ffffff">🧠</text>
-              <text x="100" y="30" fontSize="16" fill="#ffffff">💡</text>
-              <text x="60" y="110" fontSize="16" fill="#ffffff">🎯</text>
-              <text x="140" y="110" fontSize="16" fill="#ffffff">⭐</text>
+            <pattern id="bg-dot-watermark" width="32" height="32" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.5" fill="#38bdf8" />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#bg-emoji-watermark)" />
+          <rect width="100%" height="100%" fill="url(#bg-dot-watermark)" />
         </svg>
       </div>
  

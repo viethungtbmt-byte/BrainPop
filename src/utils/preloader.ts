@@ -181,8 +181,8 @@ export class AssetPreloader {
         }
       };
 
-      // Maximum 800ms safety timeout per image
-      const timeout = setTimeout(done, 800);
+      // Maximum 300ms safety timeout per image
+      const timeout = setTimeout(done, 300);
 
       const img = new Image();
       img.onload = () => {

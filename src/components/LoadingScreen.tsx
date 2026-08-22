@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Brain, Sparkles, Zap } from "lucide-react";
+import { Brain, Sparkles, Zap, Trophy, Star, Lightbulb, Target } from "lucide-react";
 import { AssetPreloader, PreloadProgressState, TOTAL_ESTIMATED_BYTES } from "../utils/preloader";
 import gameLogo from "../assets/images/emoji_brainpop_thumb_1784707895737.jpg";
 
@@ -7,230 +7,214 @@ interface LoadingScreenProps {
   onLoadingComplete: () => void;
 }
 
-// Fixed set of subtle watermark emojis with static, non-random positions (increased to ~4x size)
-const FIXED_LOADING_WATERMARKS = [
-  // Top-left quadrant
-  { emoji: "🧠", top: "4%", left: "4%", right: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "-12deg", opacity: "opacity-[0.04]" },
-  { emoji: "⚡", top: "24%", left: "14%", right: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "15deg", opacity: "opacity-[0.035]" },
-  
-  // Top-right quadrant
-  { emoji: "💡", top: "6%", right: "6%", left: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "12deg", opacity: "opacity-[0.04]" },
-  { emoji: "⭐", top: "22%", right: "16%", left: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "-15deg", opacity: "opacity-[0.035]" },
-  
-  // Middle lateral edges
-  { emoji: "🚀", top: "46%", left: "3%", right: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "-20deg", opacity: "opacity-[0.03]" },
-  { emoji: "🔮", top: "44%", right: "3%", left: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "18deg", opacity: "opacity-[0.035]" },
-  
-  // Bottom-left quadrant
-  { emoji: "🎯", top: "66%", left: "8%", right: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "8deg", opacity: "opacity-[0.04]" },
-  { emoji: "🧩", top: "84%", left: "18%", right: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "-14deg", opacity: "opacity-[0.03]" },
-  
-  // Bottom-right quadrant
-  { emoji: "🏆", top: "68%", right: "8%", left: undefined, bottom: undefined, size: "text-6xl sm:text-8xl md:text-9xl landscape:text-4xl landscape:sm:text-6xl", rotate: "-10deg", opacity: "opacity-[0.04]" },
-  { emoji: "✨", top: "86%", right: "18%", left: undefined, bottom: undefined, size: "text-5xl sm:text-7xl md:text-8xl landscape:text-3xl landscape:sm:text-5xl", rotate: "22deg", opacity: "opacity-[0.03]" },
+// Lightweight decorative vector watermarks for maximum mobile performance and 0% GPU strain
+const DECORATIVE_WATERMARKS = [
+  { icon: Brain, top: "8%", left: "6%", size: "w-10 h-10 sm:w-14 sm:h-14", rotate: "-12deg" },
+  { icon: Zap, top: "26%", left: "14%", size: "w-8 h-8 sm:w-12 sm:h-12", rotate: "15deg" },
+  { icon: Lightbulb, top: "10%", right: "8%", size: "w-10 h-10 sm:w-14 sm:h-14", rotate: "12deg" },
+  { icon: Star, top: "28%", right: "16%", size: "w-8 h-8 sm:w-12 sm:h-12", rotate: "-15deg" },
+  { icon: Target, top: "68%", left: "8%", size: "w-10 h-10 sm:w-14 sm:h-14", rotate: "8deg" },
+  { icon: Trophy, top: "70%", right: "8%", size: "w-10 h-10 sm:w-14 sm:h-14", rotate: "-10deg" },
 ];
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
-  // Target state emitted by AssetPreloader
+  const onLoadingCompleteRef = useRef(onLoadingComplete);
+  onLoadingCompleteRef.current = onLoadingComplete;
+
   const [targetState, setTargetState] = useState<PreloadProgressState>({
     percentage: 0,
     loadedBytes: 0,
     totalBytes: TOTAL_ESTIMATED_BYTES,
-    currentTaskName: "Connecting to Emoji Brainpop...",
+    currentTaskName: "Connecting to Emoji BrainPop...",
     isComplete: false,
   });
 
-  // Smooth lerped progress state for 60fps animations
-  const [lerpedPercentage, setLerpedPercentage] = useState<number>(0);
-  const [lerpedBytes, setLerpedBytes] = useState<number>(0);
+  const [displayPercentage, setDisplayPercentage] = useState<number>(15);
+  const [displayBytes, setDisplayBytes] = useState<number>(TOTAL_ESTIMATED_BYTES * 0.15);
   const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
   const [isDone, setIsDone] = useState<boolean>(false);
+  const [imageLoaded, setImageLoaded] = useState<boolean>(false);
 
-  const requestRef = useRef<number | null>(null);
-  const targetStateRef = useRef<PreloadProgressState>(targetState);
-  targetStateRef.current = targetState;
+  const hasTriggeredCompleteRef = useRef<boolean>(false);
 
-  // Start preloader on mount
+  const triggerFinish = () => {
+    if (hasTriggeredCompleteRef.current) return;
+    hasTriggeredCompleteRef.current = true;
+
+    setDisplayPercentage(100);
+    setDisplayBytes(TOTAL_ESTIMATED_BYTES);
+    setIsFadingOut(true);
+
+    setTimeout(() => {
+      setIsDone(true);
+      if (onLoadingCompleteRef.current) {
+        onLoadingCompleteRef.current();
+      }
+    }, 300);
+  };
+
   useEffect(() => {
-    const preloader = new AssetPreloader((state) => {
-      setTargetState(state);
-    });
-
-    preloader.startPreload();
-
-    // Lerp loop for silky-smooth progress updates
-    const animate = () => {
-      setLerpedPercentage((prevPct) => {
-        const targetPct = targetStateRef.current.percentage;
-        const diff = targetPct - prevPct;
-
-        // Smooth ease-out lerp step or immediate snap
-        if (Math.abs(diff) < 0.5 || targetPct >= 100) {
-          return targetPct;
+    // 1. Start Asset Preloader
+    try {
+      const preloader = new AssetPreloader((state) => {
+        setTargetState(state);
+        setDisplayPercentage((prev) => Math.max(prev, state.percentage));
+        setDisplayBytes((prev) => Math.max(prev, state.loadedBytes));
+        if (state.isComplete) {
+          triggerFinish();
         }
-        return prevPct + diff * 0.18;
       });
-
-      setLerpedBytes((prevBytes) => {
-        const targetBytes = targetStateRef.current.loadedBytes;
-        const diff = targetBytes - prevBytes;
-        if (Math.abs(diff) < 2000 || targetStateRef.current.percentage >= 100) {
-          return targetBytes;
-        }
-        return prevBytes + diff * 0.18;
+      preloader.startPreload().catch(() => {
+        triggerFinish();
       });
+    } catch {
+      triggerFinish();
+    }
 
-      requestRef.current = requestAnimationFrame(animate);
-    };
+    // 2. Smooth auto-progress interval (ensures progress moves quickly on mobile)
+    const progressInterval = setInterval(() => {
+      setDisplayPercentage((prev) => {
+        if (prev >= 95) return prev;
+        const step = Math.max(6, Math.floor((100 - prev) * 0.3));
+        const next = Math.min(96, prev + step);
+        setDisplayBytes(Math.round((next / 100) * TOTAL_ESTIMATED_BYTES));
+        return next;
+      });
+    }, 80);
 
-    requestRef.current = requestAnimationFrame(animate);
-
-    // Guaranteed failsafe timeout: dismiss loading screen within 1.2s max
+    // 3. Absolute failsafe timeout: dismiss within 0.9s max
     const failsafeTimer = setTimeout(() => {
-      setIsFadingOut(true);
-      setTimeout(() => {
-        setIsDone(true);
-        onLoadingComplete();
-      }, 250);
-    }, 1200);
+      triggerFinish();
+    }, 900);
 
     return () => {
+      clearInterval(progressInterval);
       clearTimeout(failsafeTimer);
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-      }
     };
-  }, [onLoadingComplete]);
-
-  // When lerped percentage reaches ~100% and preloader is complete, trigger fade out
-  useEffect(() => {
-    if (targetState.isComplete && !isFadingOut) {
-      setLerpedPercentage(100);
-      setIsFadingOut(true);
-      const timer = setTimeout(() => {
-        setIsDone(true);
-        onLoadingComplete();
-      }, 400); // 400ms CSS fade-out duration
-      return () => clearTimeout(timer);
-    }
-  }, [targetState.isComplete, isFadingOut, onLoadingComplete]);
+  }, []);
 
   if (isDone) {
     return null;
   }
 
-  const formattedLoadedMB = (lerpedBytes / (1024 * 1024)).toFixed(1);
-  const formattedTotalMB = (targetState.totalBytes / (1024 * 1024)).toFixed(1);
-  const displayPct = Math.min(100, Math.round(lerpedPercentage));
+  const formattedLoadedMB = (displayBytes / (1024 * 1024)).toFixed(1);
+  const formattedTotalMB = (TOTAL_ESTIMATED_BYTES / (1024 * 1024)).toFixed(1);
+  const displayPct = Math.min(100, Math.round(displayPercentage));
 
   return (
     <div
       id="loading-screen-container"
-      className={`fixed inset-0 z-[150] flex flex-col items-center justify-between p-3 sm:p-8 landscape:py-2 landscape:px-4 select-none overflow-hidden bg-gradient-to-b from-[#243044] via-[#1E283A] to-[#1A2233] text-slate-100 transition-all duration-500 ease-in-out ${
-        isFadingOut ? "opacity-0 scale-105 pointer-events-none" : "opacity-100 scale-100"
+      className={`fixed inset-0 z-[150] flex flex-col items-center justify-between p-3 sm:p-8 landscape:py-2 landscape:px-4 select-none overflow-hidden bg-gradient-to-b from-[#1e2738] via-[#161d2b] to-[#111724] text-slate-100 transition-all duration-300 ease-out ${
+        isFadingOut ? "opacity-0 pointer-events-none" : "opacity-100"
       }`}
     >
-      {/* GLOWING AMBIENT BACKGROUND ATMOSPHERE */}
+      {/* LIGHTWEIGHT AMBIENT BACKGROUND GLOW */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-        {/* Soft cyan & indigo radial glow orbs harmonized with gray-blue background */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] sm:w-[800px] sm:h-[800px] bg-gradient-to-tr from-cyan-500/15 via-indigo-500/10 to-blue-500/10 rounded-full blur-[140px]" />
-        <div className="absolute top-[-10%] left-[-10%] w-[350px] h-[350px] bg-cyan-400/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[350px] h-[350px] bg-indigo-400/10 rounded-full blur-[100px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 sm:w-[500px] sm:h-[500px] bg-cyan-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-0 left-0 w-60 h-60 bg-indigo-500/10 rounded-full blur-2xl" />
+        <div className="absolute bottom-0 right-0 w-60 h-60 bg-pink-500/10 rounded-full blur-2xl" />
 
-        {/* FIXED SUBTLE WATERMARK EMOJIS (Static coordinates, non-random) */}
-        {FIXED_LOADING_WATERMARKS.map((wm, idx) => (
-          <div
-            key={`fixed-loading-wm-${idx}`}
-            className={`absolute pointer-events-none select-none font-emoji ${wm.size} ${wm.opacity} filter grayscale contrast-125 transition-opacity duration-300`}
-            style={{
-              top: wm.top,
-              left: wm.left,
-              right: wm.right,
-              bottom: wm.bottom,
-              transform: `rotate(${wm.rotate})`,
-            }}
-            aria-hidden="true"
-          >
-            {wm.emoji}
-          </div>
-        ))}
+        {/* LIGHTWEIGHT VECTOR WATERMARKS */}
+        {DECORATIVE_WATERMARKS.map((wm, idx) => {
+          const IconComp = wm.icon;
+          return (
+            <div
+              key={`loading-wm-${idx}`}
+              className={`absolute pointer-events-none select-none text-slate-400/15 ${wm.size}`}
+              style={{
+                top: wm.top,
+                left: wm.left,
+                right: wm.right,
+                transform: `rotate(${wm.rotate})`,
+              }}
+              aria-hidden="true"
+            >
+              <IconComp className="w-full h-full" />
+            </div>
+          );
+        })}
       </div>
 
       {/* TOP HEADER BRANDING */}
       <div className="relative z-10 flex items-center gap-2 pt-1 sm:pt-4 landscape:pt-0.5">
-        <span className="flex items-center gap-1.5 px-3 py-1 landscape:px-2.5 landscape:py-0.5 rounded-full bg-[#1A2332]/85 border border-slate-600/50 text-[11px] landscape:text-[10px] font-semibold text-slate-200 shadow-sm backdrop-blur-md">
-          <Zap className="w-3.5 h-3.5 landscape:w-3 landscape:h-3 text-cyan-400 animate-pulse" />
+        <span className="flex items-center gap-1.5 px-3 py-1 landscape:px-2.5 landscape:py-0.5 rounded-full bg-[#1A2332]/90 border border-slate-700/60 text-[11px] landscape:text-[10px] font-semibold text-slate-200 shadow-sm backdrop-blur-sm">
+          <Zap className="w-3.5 h-3.5 landscape:w-3 landscape:h-3 text-cyan-400" />
           <span>HTML5 GAME ENGINE</span>
         </span>
       </div>
 
       {/* CENTER LOGO & ARTWORK DISPLAY */}
       <div className="relative z-10 flex flex-col items-center justify-center my-auto py-2 sm:py-6 landscape:py-1 text-center shrink">
-        {/* LOGO ICON CONTAINER WITH GLOWING HALO */}
+        {/* LOGO ICON CONTAINER WITH GLOW */}
         <div className="relative group">
-          {/* Soft Backlight Halo */}
-          <div className="absolute inset-0 -m-4 sm:-m-6 landscape:-m-3 rounded-3xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-pink-500 opacity-60 blur-2xl pointer-events-none" />
+          <div className="absolute inset-0 rounded-3xl bg-cyan-500/20 blur-xl pointer-events-none" />
 
-          {/* Glossy Icon Frame (Approximately 2x scaled) */}
-          <div className="relative w-36 h-36 sm:w-60 sm:h-60 md:w-64 md:h-64 landscape:w-24 landscape:h-24 sm:landscape:w-36 sm:landscape:h-36 rounded-2xl sm:rounded-3xl landscape:rounded-xl bg-[#1A2332] border-2 sm:border-3 border-slate-600/70 p-2 sm:p-3 landscape:p-1.5 shadow-2xl flex items-center justify-center overflow-hidden">
+          {/* Logo Frame */}
+          <div className="relative w-32 h-32 sm:w-52 sm:h-52 md:w-56 md:h-56 landscape:w-24 landscape:h-24 sm:landscape:w-32 sm:landscape:h-32 rounded-2xl sm:rounded-3xl landscape:rounded-xl bg-gradient-to-tr from-[#1E293B] to-[#0F172A] border-2 border-slate-600/70 p-2 sm:p-3 landscape:p-1.5 shadow-2xl flex items-center justify-center overflow-hidden">
+            {/* Fallback Graphic */}
+            <div className={`absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-tr from-cyan-950 via-indigo-950 to-slate-900 transition-opacity duration-200 ${imageLoaded ? "opacity-0" : "opacity-100"}`}>
+              <Brain className="w-12 h-12 sm:w-20 sm:h-20 text-cyan-400 animate-pulse" />
+              <span className="text-[10px] sm:text-xs font-bold text-cyan-300 mt-1 tracking-wider uppercase">BrainPop</span>
+            </div>
+
             <img
               src={gameLogo}
               alt="Emoji BrainPop Logo"
-              className="w-full h-full object-cover rounded-xl sm:rounded-2xl landscape:rounded-lg shadow-md transition-transform duration-300 group-hover:scale-105"
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageLoaded(false)}
+              className={`w-full h-full object-cover rounded-xl sm:rounded-2xl landscape:rounded-lg shadow-md transition-opacity duration-300 ${imageLoaded ? "opacity-100" : "opacity-0"}`}
             />
           </div>
 
           {/* Floating Brain Badge */}
-          <div className="absolute -top-2.5 -right-2.5 sm:-top-4 sm:-right-4 landscape:-top-2 landscape:-right-2 p-2 sm:p-3.5 landscape:p-1.5 bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-xl sm:rounded-2xl landscape:rounded-lg text-white shadow-xl border border-cyan-300/40">
-            <Brain className="w-5 h-5 sm:w-8 sm:h-8 landscape:w-4 landscape:h-4" />
+          <div className="absolute -top-2 -right-2 sm:-top-3 sm:-right-3 landscape:-top-1.5 landscape:-right-1.5 p-1.5 sm:p-2.5 landscape:p-1 bg-gradient-to-tr from-cyan-500 to-indigo-500 rounded-xl sm:rounded-2xl landscape:rounded-lg text-white shadow-lg border border-cyan-300/40">
+            <Brain className="w-4 h-4 sm:w-6 sm:h-6 landscape:w-3.5 landscape:h-3.5" />
           </div>
         </div>
 
         {/* GAME TITLE */}
-        <h1 className="mt-2.5 sm:mt-6 landscape:mt-1 text-xl sm:text-4xl landscape:text-lg sm:landscape:text-2xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-300 via-indigo-200 to-pink-300 bg-clip-text text-transparent drop-shadow-md">
+        <h1 className="mt-3 sm:mt-5 landscape:mt-1 text-xl sm:text-3xl landscape:text-lg sm:landscape:text-2xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-300 via-indigo-200 to-pink-300 bg-clip-text text-transparent drop-shadow-sm">
           Emoji BrainPop
         </h1>
 
         {/* SUBTITLE */}
-        <p className="mt-1 sm:mt-1.5 landscape:mt-0.5 text-[10px] sm:text-sm landscape:text-[10px] font-semibold tracking-wide text-cyan-300/90 uppercase">
+        <p className="mt-1 text-[10px] sm:text-xs landscape:text-[10px] font-semibold tracking-wide text-cyan-300/90 uppercase">
           Smart Memory Match
         </p>
       </div>
 
       {/* BOTTOM PROGRESS SECTION */}
-      <div className="relative z-10 w-full max-w-md sm:max-w-lg landscape:max-w-md px-2 sm:px-4 pb-2 sm:pb-6 landscape:pb-1 flex flex-col gap-2 sm:gap-2.5 landscape:gap-1.5 shrink-0">
+      <div className="relative z-10 w-full max-w-xs sm:max-w-md landscape:max-w-xs px-2 pb-2 sm:pb-6 landscape:pb-1 flex flex-col gap-2 shrink-0">
         {/* TASK STATUS & METRIC READOUT */}
         <div className="flex items-center justify-between text-xs sm:text-sm landscape:text-[11px] font-semibold text-slate-300 px-1">
-          <div className="flex items-center gap-1.5 sm:gap-2 truncate max-w-[62%]">
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 landscape:w-3 landscape:h-3 text-cyan-400 shrink-0 animate-spin" style={{ animationDuration: "3s" }} />
+          <div className="flex items-center gap-1.5 truncate max-w-[62%]">
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0 animate-spin" style={{ animationDuration: "3s" }} />
             <span className="truncate text-slate-300">{targetState.currentTaskName}</span>
           </div>
 
           {/* SIZE & PERCENTAGE DISPLAY */}
-          <div className="flex items-center gap-1.5 sm:gap-2 text-right font-mono text-cyan-300 shrink-0">
-            <span className="text-slate-400 text-[10px] sm:text-xs landscape:text-[10px]">
+          <div className="flex items-center gap-1.5 text-right font-mono text-cyan-300 shrink-0">
+            <span className="text-slate-400 text-[10px] sm:text-xs">
               {formattedLoadedMB} / {formattedTotalMB} MB
             </span>
-            <span className="text-xs sm:text-sm landscape:text-xs font-bold text-cyan-400 min-w-[36px] sm:min-w-[42px] text-right">
+            <span className="text-xs sm:text-sm font-bold text-cyan-400 min-w-[32px] text-right">
               {displayPct}%
             </span>
           </div>
         </div>
 
         {/* PROGRESS BAR CONTAINER */}
-        <div className="relative w-full h-3.5 sm:h-5 landscape:h-3 rounded-full bg-[#141C29]/90 border border-slate-600/70 p-0.5 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] overflow-hidden">
-          {/* Animated Fill Bar */}
+        <div className="relative w-full h-3 sm:h-4 landscape:h-2.5 rounded-full bg-[#141C29] border border-slate-700 p-0.5 shadow-inner overflow-hidden">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-pink-500 transition-all duration-75 relative overflow-hidden shadow-[0_0_16px_rgba(6,182,212,0.6)]"
-            style={{ width: `${Math.max(3, displayPct)}%` }}
+            className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-pink-500 transition-all duration-75 relative overflow-hidden"
+            style={{ width: `${Math.max(5, displayPct)}%` }}
           >
-            {/* Glossy Shimmer Light Sweep */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
           </div>
         </div>
 
         {/* ENGINE BADGES FOOTER */}
-        <div className="flex items-center justify-center gap-2 pt-1.5 sm:pt-2 landscape:pt-1 text-[9px] sm:text-xs landscape:text-[9px] text-slate-400 font-mono font-medium px-1 border-t border-slate-700/50 mt-0.5 landscape:mt-0">
+        <div className="flex items-center justify-center gap-2 pt-1.5 text-[9px] sm:text-xs text-slate-400 font-mono font-medium border-t border-slate-800">
           <span>HTML5</span>
           <span>•</span>
           <span>WEBGL</span>
