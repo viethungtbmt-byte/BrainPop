@@ -1,30 +1,26 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { createServer as createViteServer } from "vite";
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
-  // Basic API routes & health check endpoints for Cloud Run
+  // Basic API routes & health check endpoints
   app.get(["/api/health", "/healthz", "/health"], (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    // In production, locate the static dist folder reliably
-    const distPath = fs.existsSync(path.join(__dirname, "index.html"))
-      ? __dirname
-      : path.join(process.cwd(), "dist");
-
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (_req, res) => {
       const indexPath = path.join(distPath, "index.html");

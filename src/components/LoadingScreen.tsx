@@ -64,20 +64,20 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
         const targetPct = targetStateRef.current.percentage;
         const diff = targetPct - prevPct;
 
-        // Smooth ease-out lerp step
-        if (Math.abs(diff) < 0.1) {
+        // Smooth ease-out lerp step or immediate snap
+        if (Math.abs(diff) < 0.5 || targetPct >= 100) {
           return targetPct;
         }
-        return prevPct + diff * 0.12;
+        return prevPct + diff * 0.18;
       });
 
       setLerpedBytes((prevBytes) => {
         const targetBytes = targetStateRef.current.loadedBytes;
         const diff = targetBytes - prevBytes;
-        if (Math.abs(diff) < 1000) {
+        if (Math.abs(diff) < 2000 || targetStateRef.current.percentage >= 100) {
           return targetBytes;
         }
-        return prevBytes + diff * 0.12;
+        return prevBytes + diff * 0.18;
       });
 
       requestRef.current = requestAnimationFrame(animate);
@@ -85,24 +85,35 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete 
 
     requestRef.current = requestAnimationFrame(animate);
 
+    // Guaranteed failsafe timeout: dismiss loading screen within 1.2s max
+    const failsafeTimer = setTimeout(() => {
+      setIsFadingOut(true);
+      setTimeout(() => {
+        setIsDone(true);
+        onLoadingComplete();
+      }, 250);
+    }, 1200);
+
     return () => {
+      clearTimeout(failsafeTimer);
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, []);
+  }, [onLoadingComplete]);
 
   // When lerped percentage reaches ~100% and preloader is complete, trigger fade out
   useEffect(() => {
-    if (targetState.isComplete && lerpedPercentage >= 99.5 && !isFadingOut) {
+    if (targetState.isComplete && !isFadingOut) {
+      setLerpedPercentage(100);
       setIsFadingOut(true);
       const timer = setTimeout(() => {
         setIsDone(true);
         onLoadingComplete();
-      }, 550); // 550ms CSS fade-out duration
+      }, 400); // 400ms CSS fade-out duration
       return () => clearTimeout(timer);
     }
-  }, [targetState.isComplete, lerpedPercentage, isFadingOut, onLoadingComplete]);
+  }, [targetState.isComplete, isFadingOut, onLoadingComplete]);
 
   if (isDone) {
     return null;

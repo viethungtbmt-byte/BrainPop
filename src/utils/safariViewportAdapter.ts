@@ -55,48 +55,35 @@ export function getSafariCorrectedViewport(): SafariViewportResult {
     return { width: 1200, height: 800, isSafariLandscape: false };
   }
 
-  const isSafari = detectSafari();
-  const rawW = window.innerWidth || document.documentElement?.clientWidth || 1200;
-  const rawH = window.innerHeight || document.documentElement?.clientHeight || 800;
-  const isLandscape = rawW > rawH;
-
-  // Bypass for non-Safari or non-landscape mode
-  if (!isSafari || !isLandscape) {
-    if (typeof document !== "undefined" && document.documentElement) {
-      document.documentElement.classList.remove("is-safari-landscape");
-      document.documentElement.style.removeProperty("--safari-real-vh");
-    }
-    return {
-      width: rawW,
-      height: rawH,
-      isSafariLandscape: false,
-    };
-  }
-
-  // Safari Landscape: Calculate exact visible viewport height using visualViewport
-  let width = rawW;
-  let height = rawH;
+  let rawW = window.innerWidth || document.documentElement?.clientWidth || 1200;
+  let rawH = window.innerHeight || document.documentElement?.clientHeight || 800;
 
   if (window.visualViewport) {
     const vvHeight = Math.round(window.visualViewport.height);
     const vvWidth = Math.round(window.visualViewport.width);
-
     if (vvHeight > 0 && vvWidth > 0) {
-      height = vvHeight;
-      width = vvWidth;
+      rawW = vvWidth;
+      rawH = vvHeight;
     }
   }
 
-  // Expose exact visible height as CSS custom property and class for Safari Landscape
+  const isSafari = detectSafari();
+  const isLandscape = rawW > rawH;
+
   if (typeof document !== "undefined" && document.documentElement) {
-    document.documentElement.classList.add("is-safari-landscape");
-    document.documentElement.style.setProperty("--safari-real-vh", `${height}px`);
+    if (isSafari && isLandscape) {
+      document.documentElement.classList.add("is-safari-landscape");
+      document.documentElement.style.setProperty("--safari-real-vh", `${rawH}px`);
+    } else {
+      document.documentElement.classList.remove("is-safari-landscape");
+      document.documentElement.style.removeProperty("--safari-real-vh");
+    }
   }
 
   return {
-    width,
-    height,
-    isSafariLandscape: true,
+    width: rawW,
+    height: rawH,
+    isSafariLandscape: isSafari && isLandscape,
   };
 }
 

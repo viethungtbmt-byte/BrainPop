@@ -277,6 +277,8 @@ export class SoundSynth {
    * Unlock AudioContext on demand or on first gesture
    */
   public unlockAudio(): void {
+    this.hasUserInteracted = true;
+    this.detachGestureListeners();
     try {
       this.init();
       if (this.pendingMusicId && this.pendingMusicId !== "music_none" && this.enabled) {
@@ -749,6 +751,9 @@ export class SoundSynth {
   }
 
   private init() {
+    if (!this.hasUserInteracted) {
+      return;
+    }
     try {
       if (!this.ctx) {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -756,7 +761,7 @@ export class SoundSynth {
           this.ctx = new AudioCtx();
         }
       }
-      if (this.ctx && this.ctx.state === "suspended" && this.hasUserInteracted) {
+      if (this.ctx && this.ctx.state === "suspended") {
         this.ctx.resume().catch(() => {});
       }
     } catch (e) {

@@ -135,3 +135,23 @@ function createSafeStorage(type: "localStorage" | "sessionStorage"): Storage {
 
 export const safeLocalStorage: Storage = createSafeStorage("localStorage");
 export const safeSessionStorage: Storage = createSafeStorage("sessionStorage");
+
+export const safeStorage = {
+  get: (key: string, fallbackValue: string | null = null): string | null => {
+    const val = safeLocalStorage.getItem(key);
+    return val !== null ? val : fallbackValue;
+  },
+  set: (key: string, value: string): void => {
+    safeLocalStorage.setItem(key, value);
+  },
+  remove: (key: string): void => {
+    safeLocalStorage.removeItem(key);
+  },
+  clear: (): void => {
+    safeLocalStorage.clear();
+  },
+  getItem: (key: string): string | null => safeLocalStorage.getItem(key),
+  setItem: (key: string, value: string): void => safeLocalStorage.setItem(key, value),
+  removeItem: (key: string): void => safeLocalStorage.removeItem(key),
+};
+

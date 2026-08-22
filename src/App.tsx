@@ -887,7 +887,7 @@ export default function App() {
   }, [difficulty, isMobileLandscape, isPortrait, isMobileConfigOpen]);
 
   useEffect(() => {
-    if (activeTab !== "memory" || isMobileConfigOpen || isOrienting) return;
+    if (activeTab !== "memory" || isMobileConfigOpen) return;
 
     calculateSizing();
     const rafId = requestAnimationFrame(() => {
@@ -897,7 +897,7 @@ export default function App() {
     let observerRafId: number | null = null;
 
     const observer = new ResizeObserver((entries) => {
-      if (isMobileConfigOpen || isOrienting) return;
+      if (isMobileConfigOpen) return;
       if (observerRafId !== null) {
         cancelAnimationFrame(observerRafId);
       }
@@ -925,7 +925,7 @@ export default function App() {
       }
       observer.disconnect();
     };
-  }, [calculateSizing, activeTab, isMobileConfigOpen, isOrienting]);
+  }, [calculateSizing, activeTab, isMobileConfigOpen]);
 
   // --- PREMIUM VICTORY CELEBRATION STATE ---
   const [showVictoryCelebration, setShowVictoryCelebration] = useState<boolean>(false);
@@ -4993,19 +4993,6 @@ export default function App() {
         isWatchingAd={isWatchingAd}
         t={t}
       />
-
-      {/* ORIENTATION CHANGE SPINNER OVERLAY */}
-      {isOrienting && typeof document !== "undefined" && createPortal(
-        <div
-          id="orientation-change-spinner-overlay"
-          className="fixed inset-0 z-[999999] bg-slate-950/90 backdrop-blur-md flex items-center justify-center pointer-events-auto select-none transition-opacity duration-200 animate-fade-in"
-        >
-          <div className="flex flex-col items-center justify-center p-3.5 sm:p-4 rounded-2xl bg-slate-900/95 border border-amber-500/35 shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-3 border-amber-400/20 border-t-amber-400 animate-spin" />
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
     </div>
   );

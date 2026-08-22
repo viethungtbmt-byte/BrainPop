@@ -168,44 +168,30 @@ export class AssetPreloader {
   private async preloadImage(item: PreloadManifestItem): Promise<void> {
     if (!item.url) return;
 
-    let loaded = 0;
     const targetBytes = item.estimatedBytes;
 
-    try {
-      // Use fetch stream reader if available to track actual byte download
-      const response = await fetch(item.url);
-      if (response.ok && response.body) {
-        const contentLength = response.headers.get("content-length");
-        const total = contentLength ? parseInt(contentLength, 10) : targetBytes;
-
-        const reader = response.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) {
-            loaded += value.length;
-            const reported = Math.min(loaded, total);
-            this.loadedBytesMap.set(item.id, reported);
-            this.notifyProgress(item.taskName);
-          }
-        }
-      }
-    } catch {
-      // Fallback to Image element if fetch is blocked
-    }
-
-    // Create Image element in parallel to ensure browser decodes image texture into memory
     return new Promise((resolve) => {
+      let resolved = false;
+      const done = () => {
+        if (!resolved) {
+          resolved = true;
+          this.loadedBytesMap.set(item.id, targetBytes);
+          this.notifyProgress(item.taskName);
+          resolve();
+        }
+      };
+
+      // Maximum 800ms safety timeout per image
+      const timeout = setTimeout(done, 800);
+
       const img = new Image();
       img.onload = () => {
-        this.loadedBytesMap.set(item.id, targetBytes);
-        this.notifyProgress(item.taskName);
-        resolve();
+        clearTimeout(timeout);
+        done();
       };
       img.onerror = () => {
-        this.loadedBytesMap.set(item.id, targetBytes);
-        this.notifyProgress(item.taskName);
-        resolve();
+        clearTimeout(timeout);
+        done();
       };
       img.src = item.url!;
     });
@@ -216,7 +202,6 @@ export class AssetPreloader {
     let loadedCount = 0;
 
     for (const key of Object.keys(TRANSLATIONS)) {
-      // Force property access & string validation
       const dict = (TRANSLATIONS as Record<string, unknown>)[key];
       if (dict && typeof dict === "object") {
         Object.keys(dict).length;
@@ -225,8 +210,8 @@ export class AssetPreloader {
       const portion = Math.round((loadedCount / totalLocales) * item.estimatedBytes);
       this.loadedBytesMap.set(item.id, portion);
       this.notifyProgress(item.taskName);
-      await this.yieldToUI();
     }
+    await this.yieldToUI();
   }
 
   private async preloadGameData(item: PreloadManifestItem): Promise<void> {
@@ -241,24 +226,26 @@ export class AssetPreloader {
     if (emojiCount > 0) step++;
     this.loadedBytesMap.set(item.id, Math.round((step / totalSteps) * item.estimatedBytes));
     this.notifyProgress(item.taskName);
-    await this.yieldToUI();
 
     if (memoryPairsCount > 0) step++;
     this.loadedBytesMap.set(item.id, Math.round((step / totalSteps) * item.estimatedBytes));
     this.notifyProgress(item.taskName);
-    await this.yieldToUI();
 
     if (shopItemsCount > 0) step++;
     this.loadedBytesMap.set(item.id, item.estimatedBytes);
     this.notifyProgress(item.taskName);
+    await this.yieldToUI();
   }
 
   private async preloadFonts(item: PreloadManifestItem): Promise<void> {
-    if ("fonts" in document) {
+    if (typeof document !== "undefined" && "fonts" in document) {
       try {
-        await document.fonts.ready;
+        await Promise.race([
+          document.fonts.ready,
+          new Promise((r) => setTimeout(r, 400)),
+        ]);
       } catch (err) {
-        console.warn("Font loading ready check error:", err);
+        console.warn("Font loading check error:", err);
       }
     }
     this.loadedBytesMap.set(item.id, item.estimatedBytes);
@@ -266,21 +253,19 @@ export class AssetPreloader {
   }
 
   private async preloadAudio(item: PreloadManifestItem): Promise<void> {
-    // Touch SoundSynth instance
     try {
       if (synth) {
-        // Prepare or check audio synth status safely
+        // Audio synth ready
       }
     } catch {
       // Ignore audio policy warnings
     }
 
-    // Simulate chunked audio buffer allocation
-    const chunks = 4;
+    const chunks = 2;
     for (let i = 1; i <= chunks; i++) {
       this.loadedBytesMap.set(item.id, Math.round((i / chunks) * item.estimatedBytes));
       this.notifyProgress(item.taskName);
-      await new Promise((r) => setTimeout(r, 40));
+      await new Promise((r) => setTimeout(r, 15));
     }
   }
 

@@ -8,7 +8,7 @@ import './index.css';
 // Global Unhandled Rejection & Error listeners to harden against unhandled promise rejections or external script failures
 if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
-    // Log politely and prevent browser default crash
+    // Log politely and prevent unhandled promise rejection error from breaking runtime
     console.warn('[Global UnhandledRejection Caught]:', event.reason);
     event.preventDefault();
   });
@@ -21,6 +21,18 @@ if (typeof window !== 'undefined') {
         event.message.includes('ResizeObserver loop completed with undelivered notifications'))
     ) {
       event.stopImmediatePropagation();
+      return;
+    }
+    // Suppress external / ad / tracking script failures from bubbling up
+    if (
+      event.filename &&
+      (event.filename.includes('poki') ||
+        event.filename.includes('googlesyndication') ||
+        event.filename.includes('doubleclick') ||
+        event.filename.includes('adservice'))
+    ) {
+      console.warn('[External Script Error Suppressed]:', event.message);
+      event.preventDefault();
       return;
     }
     console.warn('[Global Error Caught]:', event.error || event.message);

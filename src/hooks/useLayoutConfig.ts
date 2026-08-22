@@ -1,15 +1,7 @@
 import { useState, useEffect } from "react";
 import { DisplayConfig, getDisplayConfig } from "../utils/layouts";
-import { getSafariCorrectedViewport, createViewportStabilizer } from "../utils/safariViewportAdapter";
+import { getSafariCorrectedViewport } from "../utils/safariViewportAdapter";
 import { safeLocalStorage, safeSessionStorage } from "../utils/safeStorage";
-
-const getIsPortrait = (): boolean => {
-  if (typeof window !== "undefined") {
-    const dims = getSafariCorrectedViewport();
-    if (dims.width > 0 && dims.height > 0) return dims.height >= dims.width;
-  }
-  return true;
-};
 
 const getViewportDimensions = () => {
   if (typeof window === "undefined") return { width: 1200, height: 800 };
@@ -18,8 +10,8 @@ const getViewportDimensions = () => {
   let h = viewport.height;
 
   if (w <= 0 || h <= 0) {
-    w = 1200;
-    h = 800;
+    w = typeof window !== "undefined" ? window.innerWidth || 1200 : 1200;
+    h = typeof window !== "undefined" ? window.innerHeight || 800 : 800;
   }
 
   return {
@@ -29,10 +21,9 @@ const getViewportDimensions = () => {
 };
 
 export function useLayoutConfig() {
-  // Always initialize from scratch. Do not restore or preserve previous values from previous sessions or cache.
+  // Always initialize from scratch with clean layout metrics
   const [dimensions, setDimensions] = useState(() => {
     if (typeof window !== "undefined") {
-      // Clear any potentially cached viewport or layout state from previous play sessions
       try {
         safeLocalStorage.removeItem("emoji_brainpop_viewport");
         safeLocalStorage.removeItem("emoji_brainpop_zoom");
@@ -43,21 +34,8 @@ export function useLayoutConfig() {
         safeSessionStorage.removeItem("emoji_brainpop_dimensions");
         safeSessionStorage.removeItem("emoji_brainpop_layout");
       } catch (e) {
-        // Safe check for private browsing mode where storage might be disabled
+        // Safe check
       }
-
-      // Enforce clean browser zoom reset on startup
-      try {
-        if (document.documentElement) {
-          document.documentElement.style.zoom = "100%";
-        }
-        if (document.body) {
-          document.body.style.zoom = "100%";
-        }
-      } catch (e) {
-        // Ignore zoom style errors
-      }
-
       return getViewportDimensions();
     }
     return { width: 1200, height: 800 };
@@ -66,149 +44,91 @@ export function useLayoutConfig() {
   const [isOrienting, setIsOrienting] = useState<boolean>(false);
 
   useEffect(() => {
-    // Fresh viewport metadata initialization on mount (app launch)
+    // Ensure viewport meta tag is properly set on mobile/tablet
     const initViewport = () => {
-      const viewportMeta = document.querySelector('meta[name="viewport"]');
-      if (viewportMeta) {
-        viewportMeta.setAttribute(
-          "content",
-          "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
-        );
+      let viewportMeta = document.querySelector('meta[name="viewport"]');
+      if (!viewportMeta) {
+        viewportMeta = document.createElement("meta");
+        viewportMeta.setAttribute("name", "viewport");
+        document.head.appendChild(viewportMeta);
       }
+      viewportMeta.setAttribute(
+        "content",
+        "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      );
     };
 
     initViewport();
 
-    let debounceTimer: number | null = null;
-    let maxTimeoutTimer: number | null = null;
     let rafId: number | null = null;
-    let lastIsPortrait = dimensions.height >= dimensions.width;
-    let isCurrentlyOrienting = false;
+    let orientationTimeout: number | null = null;
 
-    const startOrienting = () => {
-      if (!isCurrentlyOrienting) {
-        isCurrentlyOrienting = true;
-        setIsOrienting(true);
-      }
-
-      if (maxTimeoutTimer === null) {
-        // Hard safety limit: max 600ms spinner duration under any condition
-        maxTimeoutTimer = window.setTimeout(() => {
-          finishOrienting();
-        }, 600);
-      }
-    };
-
-    const finishOrienting = () => {
-      if (debounceTimer !== null) {
-        clearTimeout(debounceTimer);
-        debounceTimer = null;
-      }
-      if (maxTimeoutTimer !== null) {
-        clearTimeout(maxTimeoutTimer);
-        maxTimeoutTimer = null;
-      }
-
-      const next = getSafariCorrectedViewport();
-      setDimensions({ width: next.width, height: next.height });
-      lastIsPortrait = next.height >= next.width;
-
-      // Allow 2 frames for React and browser layout paint before removing spinner
+    const updateDimensions = () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        rafId = requestAnimationFrame(() => {
-          isCurrentlyOrienting = false;
-          setIsOrienting(false);
+        const next = getSafariCorrectedViewport();
+        setDimensions((prev) => {
+          if (prev.width === next.width && prev.height === next.height) {
+            return prev;
+          }
+          return { width: next.width, height: next.height };
         });
       });
     };
 
-    const handleResize = (isExplicitOrientationEvent = false) => {
-      const current = getSafariCorrectedViewport();
-      const currentIsPortrait = current.height >= current.width;
-      const isAspectFlipped = currentIsPortrait !== lastIsPortrait;
+    const handleOrientationChange = () => {
+      setIsOrienting(true);
+      updateDimensions();
 
-      if (isExplicitOrientationEvent || isAspectFlipped || isCurrentlyOrienting) {
-        startOrienting();
-
-        if (debounceTimer !== null) {
-          clearTimeout(debounceTimer);
-        }
-
-        // Wait 250ms of quiet time after last resize/orientation tick to ensure viewport has stabilized
-        debounceTimer = window.setTimeout(() => {
-          finishOrienting();
-        }, 250);
-      } else {
-        // Normal minor desktop resize (no orientation change)
-        setDimensions({ width: current.width, height: current.height });
-        lastIsPortrait = currentIsPortrait;
-      }
+      if (orientationTimeout !== null) clearTimeout(orientationTimeout);
+      orientationTimeout = window.setTimeout(() => {
+        updateDimensions();
+        setIsOrienting(false);
+      }, 150);
     };
 
-    // Initial check
-    const initialViewport = getSafariCorrectedViewport();
-    setDimensions({ width: initialViewport.width, height: initialViewport.height });
+    const handleStandardResize = () => {
+      updateDimensions();
+    };
 
-    const onExplicitOrientationChange = () => handleResize(true);
-    const onStandardResize = () => handleResize(false);
+    // Initial sync
+    updateDimensions();
 
-    window.addEventListener("resize", onStandardResize);
-    window.addEventListener("orientationchange", onExplicitOrientationChange);
+    window.addEventListener("resize", handleStandardResize, { passive: true });
+    window.addEventListener("orientationchange", handleOrientationChange, { passive: true });
 
     const screenOrientation = window.screen?.orientation;
-    if (screenOrientation && screenOrientation.addEventListener) {
-      screenOrientation.addEventListener("change", onExplicitOrientationChange);
+    if (screenOrientation && typeof screenOrientation.addEventListener === "function") {
+      screenOrientation.addEventListener("change", handleOrientationChange);
     }
 
     const visualViewport = window.visualViewport;
-    if (visualViewport && visualViewport.addEventListener) {
-      visualViewport.addEventListener("resize", onStandardResize);
+    if (visualViewport && typeof visualViewport.addEventListener === "function") {
+      visualViewport.addEventListener("resize", handleStandardResize, { passive: true });
     }
 
     let portraitMq: MediaQueryList | null = null;
-    if (window.matchMedia) {
+    if (typeof window.matchMedia === "function") {
       portraitMq = window.matchMedia("(orientation: portrait)");
-      if (portraitMq.addEventListener) {
-        portraitMq.addEventListener("change", onExplicitOrientationChange);
+      if (portraitMq && typeof portraitMq.addEventListener === "function") {
+        portraitMq.addEventListener("change", handleOrientationChange);
       }
     }
 
-    // Prevent multi-touch pinch zoom interactions on touch devices safely
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length > 1) {
-        e.preventDefault();
-      }
-    };
-
-    const handleGestureStart = (e: Event) => {
-      e.preventDefault();
-    };
-
-    document.addEventListener("touchstart", handleTouchStart, { passive: false });
-    document.addEventListener("gesturestart", handleGestureStart, { passive: false });
-
-    const originalTouchAction = document.body.style.touchAction;
-    document.body.style.touchAction = "manipulation";
-
     return () => {
-      if (debounceTimer !== null) clearTimeout(debounceTimer);
-      if (maxTimeoutTimer !== null) clearTimeout(maxTimeoutTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", onStandardResize);
-      window.removeEventListener("orientationchange", onExplicitOrientationChange);
-      if (screenOrientation && screenOrientation.removeEventListener) {
-        screenOrientation.removeEventListener("change", onExplicitOrientationChange);
+      if (orientationTimeout !== null) clearTimeout(orientationTimeout);
+      window.removeEventListener("resize", handleStandardResize);
+      window.removeEventListener("orientationchange", handleOrientationChange);
+      if (screenOrientation && typeof screenOrientation.removeEventListener === "function") {
+        screenOrientation.removeEventListener("change", handleOrientationChange);
       }
-      if (visualViewport && visualViewport.removeEventListener) {
-        visualViewport.removeEventListener("resize", onStandardResize);
+      if (visualViewport && typeof visualViewport.removeEventListener === "function") {
+        visualViewport.removeEventListener("resize", handleStandardResize);
       }
-      if (portraitMq && portraitMq.removeEventListener) {
-        portraitMq.removeEventListener("change", onExplicitOrientationChange);
+      if (portraitMq && typeof portraitMq.removeEventListener === "function") {
+        portraitMq.removeEventListener("change", handleOrientationChange);
       }
-      document.removeEventListener("touchstart", handleTouchStart);
-      document.removeEventListener("gesturestart", handleGestureStart);
-      document.body.style.touchAction = originalTouchAction;
     };
   }, []);
 
